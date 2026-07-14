@@ -1,0 +1,32 @@
+---
+import Dashboard from '../components/Dashboard';
+import '../styles/global.css';
+---
+
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/png" href="/icon-192.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="generator" content={Astro.generator} />
+    <title>Second Brain - Tactile Knowledge Base</title>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#12141c" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="description" content="Personal mobile-first knowledge base with Astro and Gemini" />
+  </head>
+  <body>
+    <Dashboard client:load />
+
+    <script is:inline>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('Service Worker registered successfully!', reg.scope))
+            .catch(err => console.error('Service Worker registration failed:', err));
+        });
+      }
+    </script>
+  </body>
+</html>

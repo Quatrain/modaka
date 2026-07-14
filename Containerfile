@@ -1,0 +1,29 @@
+# Final stage using Bun for fast SSR execution
+FROM oven/bun:alpine
+WORKDIR /app
+
+# OCI standard labels
+LABEL org.opencontainers.image.title="Second Brain"
+LABEL org.opencontainers.image.description="Tactile and touch-first PWA knowledge management system"
+LABEL org.opencontainers.image.source="https://github.com/Quatrain/CoreApps"
+LABEL org.opencontainers.image.licenses="AGPL-3.0"
+LABEL org.opencontainers.image.vendor="Quatrain Technologies"
+LABEL org.opencontainers.image.authors="Quatrain Developers <developers@quatrain.com>"
+
+# Copy pre-built application from host build context
+COPY dist ./dist
+COPY node_modules ./node_modules
+COPY package.json ./
+
+# Create data directories for Local Storage
+RUN mkdir -p /data/second-brain/metadata /data/second-brain/documents && \
+    chown -R bun:bun /data/second-brain
+
+# Run as non-root unprivileged user
+USER bun
+
+ENV PORT=4000
+ENV HOST=0.0.0.0
+EXPOSE 4000
+
+CMD ["bun", "run", "dist/server/entry.mjs"]

@@ -1,0 +1,72 @@
+{
+  "name": "@quatrain/second-brain",
+  "type": "module",
+  "version": "1.0.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/node": "^9.0.0",
+    "@astrojs/react": "^4.2.0",
+    "@mantine/core": "^7.10.0",
+    "@mantine/hooks": "^7.10.0",
+    "@quatrain/ai": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ai",
+    "@quatrain/ai-gemini": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ai-gemini",
+    "@quatrain/api-server": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api-server",
+    "@quatrain/api-server-astro": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api-server-astro",
+    "@quatrain/backend": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/backend",
+    "@quatrain/core": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/core",
+    "@quatrain/log": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/log",
+    "@quatrain/okf": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/okf",
+    "@quatrain/storage": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage",
+    "@quatrain/storage-git": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage-git",
+    "@quatrain/storage-local": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage-local",
+    "@quatrain/ux": "portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux",
+    "@quatrain/ux-form-react": "portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-form-react",
+    "@quatrain/ux-list-react": "portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-list-react",
+    "@tabler/icons-react": "^3.5.0",
+    "astro": "^5.0.0",
+    "dotenv": "^16.4.5",
+    "fs-extra": "^11.2.0",
+    "pdf-parse": "^1.1.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/pdf-parse": "^1.1.4",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "postcss": "^8.4.38",
+    "postcss-preset-mantine": "^1.15.0",
+    "postcss-simple-vars": "^7.0.1",
+    "typescript": "^5.2.2"
+  },
+  "resolutions": {
+    "@quatrain/ai": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ai",
+    "@quatrain/ai-gemini": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ai-gemini",
+    "@quatrain/api": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api",
+    "@quatrain/api-server": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api-server",
+    "@quatrain/api-server-astro": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api-server-astro",
+    "@quatrain/backend": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/backend",
+    "@quatrain/core": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/core",
+    "@quatrain/http": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/http",
+    "@quatrain/log": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/log",
+    "@quatrain/okf": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/okf",
+    "@quatrain/storage": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage",
+    "@quatrain/storage-git": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage-git",
+    "@quatrain/storage-local": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage-local",
+    "@quatrain/types": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/types",
+    "@quatrain/ux": "portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux",
+    "@quatrain/ux-form": "portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-form",
+    "@quatrain/ux-form-react": "portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-form-react",
+    "@quatrain/ux-list": "portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-list",
+    "@quatrain/ux-list-react": "portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-list-react"
+  }
+}
