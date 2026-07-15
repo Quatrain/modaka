@@ -12,8 +12,19 @@ export default defineConfig({
   }),
   integrations: [react()],
   vite: {
+    ssr: {
+      noExternal: [
+        '@quatrain/ux',
+        '@quatrain/ux-form-react',
+        '@quatrain/ux-list-react',
+        '@quatrain/ux-react',
+        /@quatrain\/.*/
+      ]
+    },
     resolve: {
+      dedupe: ['react', 'react-dom'],
       alias: {
+        '@quatrain/ux-react': path.resolve('/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-react/src/index.ts'),
         '@quatrain/core': path.join(coreDir, 'core/src/index.ts'),
         '@quatrain/types': path.join(coreDir, 'types/src/index.ts'),
         '@quatrain/backend': path.join(coreDir, 'backend/src/index.ts'),

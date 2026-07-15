@@ -42,7 +42,8 @@ body {
 /* Constrained mobile-first container */
 .app-container {
   width: 100%;
-  max-width: 540px;
+  max-width: 1200px;
+  margin: 0 auto;
   background-color: var(--color-container-bg);
   min-height: 100vh;
   position: relative;
@@ -71,10 +72,12 @@ h1, h2, h3, h4, .font-heading {
 
 /* Sticky bottom navigation (96px height) */
 .bottom-nav {
-  position: absolute;
+  position: fixed;
   bottom: 0;
-  left: 0;
+  left: 50%;
+  transform: translateX(-50%);
   width: 100%;
+  max-width: 1200px;
   height: var(--height-nav);
   background-color: rgba(18, 20, 28, 0.95);
   backdrop-filter: blur(10px);

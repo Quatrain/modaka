@@ -30,13 +30,15 @@
     "@quatrain/ux": "portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux",
     "@quatrain/ux-form-react": "portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-form-react",
     "@quatrain/ux-list-react": "portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-list-react",
+    "@quatrain/ux-react": "portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-react",
     "@tabler/icons-react": "^3.5.0",
     "astro": "^5.0.0",
     "dotenv": "^16.4.5",
     "fs-extra": "^11.2.0",
     "pdf-parse": "^1.1.1",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",
@@ -49,6 +51,9 @@
     "typescript": "^5.2.2"
   },
   "resolutions": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@quatrain/ux-react": "portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-react",
     "@quatrain/ai": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ai",
     "@quatrain/ai-gemini": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ai-gemini",
     "@quatrain/api": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api",

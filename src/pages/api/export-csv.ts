@@ -22,7 +22,7 @@ export const GET: APIRoute = async () => {
       let csv = 'ID,Title,Category,Tags,Summary,CreatedAt\n';
       for (const item of items) {
          const tagsStr = item.val('tags')?.join(';') || '';
-         csv += `${escape(item.val('id'))},${escape(item.val('title'))},${escape(item.val('category'))},${escape(tagsStr)},${escape(item.val('summary'))},${escape(item.val('createdAt'))}\n`;
+         csv += `${escape(item.uid)},${escape(item.val('title'))},${escape(item.val('category'))},${escape(tagsStr)},${escape(item.val('summary'))},${escape(item.val('createdAt'))}\n`;
       }
 
       return new Response(csv, {

@@ -8,6 +8,12 @@ export const ContentItemProperties = [
       mandatory: false
    },
    {
+      name: 'type',
+      type: StringProperty.TYPE,
+      mandatory: false,
+      defaultValue: 'document'
+   },
+   {
       name: 'category',
       type: StringProperty.TYPE,
       mandatory: false,
@@ -37,6 +43,16 @@ export const ContentItemProperties = [
    },
    {
       name: 'createdAt',
+      type: StringProperty.TYPE,
+      mandatory: false
+   },
+   {
+      name: 'contextNote',
+      type: StringProperty.TYPE,
+      mandatory: false
+   },
+   {
+      name: 'body',
       type: StringProperty.TYPE,
       mandatory: false
    }

@@ -1,0 +1,85 @@
+# Configuration of user interests and categories for first startup onboarding
+options:
+  - key: literature
+    label: "📚 Littérature & Écritures"
+    desc: "Notes de lecture, critiques d'œuvres, fiches auteurs."
+    subthemes:
+      - key: literature/general
+        label: "Littérature Générale"
+        desc: "Notes générales de lecture, critiques d'ouvrages classiques."
+      - key: literature/sci-fi
+        label: "Science-Fiction & Fantastique"
+        desc: "Uchronies, space-opera, anticipations technologiques."
+      - key: literature/essays
+        label: "Essais & Philosophie"
+        desc: "Traités philosophiques, essais de société et d'histoire."
+
+  - key: technology
+    label: "🤖 Technologie & Programmation"
+    desc: "Veille technique, programmation, informatique."
+    subthemes:
+      - key: technology/programming
+        label: "Informatique & Dev"
+        desc: "Notes de langages (JS/TS), architectures logicielles, tutoriels."
+      - key: technology/ai
+        label: "Intelligence Artificielle & LLMs"
+        desc: "Réseaux de neurones, agents intelligents, prompting."
+      - key: technology/security
+        label: "Sécurité & Réseaux"
+        desc: "Cybersécurité, protocoles réseau, auto-hébergement."
+
+  - key: health
+    label: "💡 Santé & Sciences"
+    desc: "Médecine, biologie, longévité, neurosciences."
+    subthemes:
+      - key: health/general
+        label: "Santé Générale"
+        desc: "Hygiène de vie, sport, alimentation équilibrée."
+      - key: health/biohacking
+        label: "Biohacking & Longévité"
+        desc: "Optimisation de sommeil, routines matinales, longévité active."
+      - key: health/neuroscience
+        label: "Neurosciences"
+        desc: "Fonctionnement cérébral, apprentissage, concentration."
+
+  - key: finance
+    label: "📈 Finance & Économie"
+    desc: "Économie, bourse, finances personnelles."
+    subthemes:
+      - key: finance/personal
+        label: "Finances Personnelles"
+        desc: "Budget familial, épargne, investissement passif."
+      - key: finance/investment
+        label: "Bourse & Actifs"
+        desc: "Analyses fondamentales d'actions, cryptomonnaies."
+      - key: finance/economy
+        label: "Macroéconomie"
+        desc: "Analyses de marchés, politiques monétaires."
+
+  - key: culinary
+    label: "🍳 Cuisine & Recettes"
+    desc: "Votre livre de recettes personnel et explorations culinaires."
+    subthemes:
+      - key: culinary/daily
+        label: "Recettes du Quotidien"
+        desc: "Plats faciles et rapides, cuisine de tous les jours."
+      - key: culinary/pastry
+        label: "Pâtisserie"
+        desc: "Gâteaux, pains, desserts élaborés."
+      - key: culinary/recipes
+        label: "Gastronomie & Découvertes"
+        desc: "Accords mets-vins, cuisine gastronomique."
+
+  - key: travel
+    label: "✈️ Voyages & Exploration"
+    desc: "Itinéraires de voyages, fiches destinations, randonnées."
+    subthemes:
+      - key: travel/hiking
+        label: "Randonnée & Nature"
+        desc: "Itinéraires pédestres, matériel outdoor, parcs nationaux."
+      - key: travel/urban
+        label: "City Trips"
+        desc: "Guides de villes, musées, bonnes adresses urbaines."
+      - key: travel/exploration
+        label: "Grands Voyages"
+        desc: "Itinéraires transcontinentaux, préparatifs de voyage."

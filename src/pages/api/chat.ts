@@ -2,7 +2,9 @@ import type { APIRoute } from 'astro';
 import { initBackend } from '../../lib/backend';
 import { ContentItem } from '../../lib/models/ContentItem';
 import { Storage } from '@quatrain/storage';
-import { GeminiAdapter } from '@quatrain/ai-gemini';
+import { Ai } from '@quatrain/ai';
+import { Backend } from '@quatrain/backend';
+import { Core } from '@quatrain/core';
 import { Readable } from 'node:stream';
 import * as path from 'node:path';
 
@@ -22,6 +24,7 @@ export const POST: APIRoute = async ({ request }) => {
    try {
       const { messages } = await request.json();
       if (!messages || !Array.isArray(messages)) {
+         Core.warn('[Chat API] Request failed: Invalid message thread');
          return new Response(JSON.stringify({ error: 'Invalid message thread' }), {
             status: 400,
             headers: { 'Content-Type': 'application/json' }
@@ -32,6 +35,7 @@ export const POST: APIRoute = async ({ request }) => {
       const query = ContentItem.query();
       const itemsResult = await ContentItem.repository().query(query);
       const items = itemsResult.items || [];
+      Backend.info(`Queried metadata documents from database: found ${items.length} items`);
 
       // Look up and load full content for any referenced documents
       const lastMessage = messages[messages.length - 1]?.content || '';
@@ -39,11 +43,25 @@ export const POST: APIRoute = async ({ request }) => {
 
       for (const item of items) {
          const title = item.val('title') || '';
-         const id = item.val('id') || '';
-         if (
-            lastMessage.includes(id) || 
-            (title.length > 3 && lastMessage.toLowerCase().includes(title.toLowerCase()))
-         ) {
+         const id = item.uid || '';
+         
+         const cleanMsg = lastMessage.toLowerCase();
+         const hasIdMatch = cleanMsg.includes(id.toLowerCase());
+         
+         // Extract words from title, filtering out common stop words
+         const stopWords = new Set(['les', 'des', 'une', 'pour', 'avec', 'dans', 'the', 'and', 'for', 'sur', 'aux', 'mon', 'mes', 'ton', 'tes', 'son', 'ses', 'une', 'par', 'grace', 'dune']);
+         const titleWords = title.toLowerCase()
+            .replace(/[^\w\s-]/g, ' ')
+            .split(/\s+/)
+            .filter(w => w.length > 2 && !stopWords.has(w));
+            
+         const hasTitleMatch = titleWords.some(word => cleanMsg.includes(word));
+         
+         const hasTagMatch = item.val('tags')?.some(tag => 
+            tag.length > 2 && !stopWords.has(tag.toLowerCase()) && cleanMsg.includes(tag.toLowerCase())
+         );
+
+         if (hasIdMatch || hasTitleMatch || hasTagMatch) {
             const markdownRef = item.val('markdownFileUri');
             if (markdownRef) {
                try {
@@ -65,7 +83,7 @@ export const POST: APIRoute = async ({ request }) => {
 
       const docListContext = items.map((item, idx) => {
          return `[Document #${idx + 1}]
-ID: ${item.val('id')}
+ID: ${item.uid}
 Title: ${item.val('title')}
 Category: ${item.val('category')}
 Tags: ${item.val('tags')?.join(', ') || ''}
@@ -89,16 +107,22 @@ Instructions:
       const formattedMessages = messages.map((m: any) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
       const finalPrompt = `${systemPrompt}\n\nChat History:\n${formattedMessages}\n\nAssistant:`;
 
-      // Initialize Gemini Adapter
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-         return new Response(JSON.stringify({ error: 'GEMINI_API_KEY not configured' }), {
+      // Retrieve Gemini Adapter via global AI registry
+      let gemini;
+      try {
+         gemini = Ai.getAdapter();
+      } catch (err: any) {
+         Core.error('[Chat API] AI Adapter not initialized: ' + err.message, err);
+         return new Response(JSON.stringify({ error: 'AI Adapter not initialized: ' + err.message }), {
             status: 500,
             headers: { 'Content-Type': 'application/json' }
          });
       }
-      const gemini = new GeminiAdapter(apiKey);
-      const responseText = await gemini.generateText(finalPrompt);
+      const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+      Core.info(`[Gemini] Sending prompt to model: ${model}`);
+      Core.debug(`[Gemini] Conversation Prompt: ${finalPrompt}`);
+      const responseText = await gemini.generateText(finalPrompt, { model });
+      Core.info('[Gemini] Received text response successfully');
 
       return new Response(JSON.stringify({ 
          success: true, 
@@ -109,6 +133,7 @@ Instructions:
       });
 
    } catch (err: any) {
+      Core.error('[Chat API] Execution failed: ' + err.message, err);
       return new Response(JSON.stringify({ error: err.message || 'Internal Server Error' }), {
          status: 500,
          headers: { 'Content-Type': 'application/json' }
