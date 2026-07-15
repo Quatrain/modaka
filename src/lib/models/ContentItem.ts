@@ -3,6 +3,11 @@ import { StringProperty, ArrayProperty } from '@quatrain/core';
 
 export const ContentItemProperties = [
    {
+      name: 'id',
+      type: StringProperty.TYPE,
+      mandatory: false
+   },
+   {
       name: 'title',
       type: StringProperty.TYPE,
       mandatory: false

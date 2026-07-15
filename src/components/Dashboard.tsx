@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from '@quatrain/ux-react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
    IconMessage, 
    IconFileText, 
@@ -10,7 +10,10 @@ import {
    IconLoader2,
    IconCircleCheck,
    IconCamera,
-   IconRefresh
+   IconRefresh,
+   IconUser,
+   IconVolume,
+   IconVolumeOff
 } from '@tabler/icons-react';
 
 interface ContentItemData {
@@ -22,11 +25,72 @@ interface ContentItemData {
    originalFileUri?: string;
    markdownFileUri?: string;
    createdAt?: string;
+   contextNote?: string;
+   body?: string;
 }
 
 interface Message {
    role: 'user' | 'assistant';
    content: string;
+}
+
+function Markdown({ content }: { content: string }) {
+   if (!content) return null;
+   
+   const lines = content.split('\n');
+   let inList = false;
+   const elements: React.ReactNode[] = [];
+   let currentListItems: React.ReactNode[] = [];
+
+   const parseInline = (text: string) => {
+      let html = text
+         .replace(/&/g, '&amp;')
+         .replace(/</g, '&lt;')
+         .replace(/>/g, '&gt;')
+         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+         .replace(/\*(.*?)\*/g, '<em>$1</em>')
+         .replace(/`([^`]+)`/g, '<code style="background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-family: monospace;">$1</code>')
+         .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: #00e599; text-decoration: underline;">$1</a>');
+      
+      return <span dangerouslySetInnerHTML={{ __html: html }} />;
+   };
+
+   for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      if (line.startsWith('* ') || line.startsWith('- ')) {
+         if (!inList) {
+            inList = true;
+            currentListItems = [];
+         }
+         currentListItems.push(
+            <li key={`li-${i}`} style={{ marginBottom: '4px', fontSize: '15px' }}>
+               {parseInline(line.substring(2))}
+            </li>
+         );
+      } else {
+         if (inList) {
+            inList = false;
+            elements.push(<ul key={`ul-${i}`} style={{ marginLeft: '20px', marginBottom: '12px', listStyleType: 'disc' }}>{currentListItems}</ul>);
+         }
+         
+         if (line.startsWith('### ')) {
+            elements.push(<h4 key={i} style={{ fontSize: '16px', fontWeight: 'bold', marginTop: '16px', marginBottom: '8px' }}>{parseInline(line.substring(4))}</h4>);
+         } else if (line.startsWith('## ')) {
+            elements.push(<h3 key={i} style={{ fontSize: '18px', fontWeight: 'bold', marginTop: '20px', marginBottom: '10px' }}>{parseInline(line.substring(3))}</h3>);
+         } else if (line.startsWith('# ')) {
+            elements.push(<h2 key={i} style={{ fontSize: '22px', fontWeight: 'bold', marginTop: '24px', marginBottom: '12px' }}>{parseInline(line.substring(2))}</h2>);
+         } else if (line) {
+            elements.push(<p key={i} style={{ fontSize: '15px', lineHeight: '1.6', marginBottom: '12px' }}>{parseInline(line)}</p>);
+         }
+      }
+   }
+   
+   if (inList) {
+      elements.push(<ul key="ul-end" style={{ marginLeft: '20px', marginBottom: '12px', listStyleType: 'disc' }}>{currentListItems}</ul>);
+   }
+
+   return <div style={{ display: 'flex', flexDirection: 'column' }}>{elements}</div>;
 }
 
 export default function Dashboard() {
@@ -40,6 +104,182 @@ export default function Dashboard() {
    const [reindexing, setReindexing] = useState(false);
    const [queueTasks, setQueueTasks] = useState<any[]>([]);
    const [crawlDepth, setCrawlDepth] = useState<number>(0);
+   const [devMode, setDevMode] = useState<boolean>(false);
+   const [showRawViewer, setShowRawViewer] = useState<boolean>(false);
+   const [docToDelete, setDocToDelete] = useState<ContentItemData | null>(null);
+   const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
+   const [userProfile, setUserProfile] = useState({
+      name: 'Olivier Lépine',
+      email: 'olivier@lepine.fr',
+      language: 'Français',
+      ttsProvider: 'Browser',
+      elevenLabsApiKey: '',
+      elevenLabsVoiceId: 'bVsJfghVbJypxgwVISO3'
+   });
+
+   useEffect(() => {
+      const stored = localStorage.getItem('sb_user_profile');
+      if (stored) {
+         try {
+            const parsed = JSON.parse(stored);
+            setUserProfile(prev => ({
+               ...prev,
+               ...parsed
+            }));
+         } catch (e) {
+            // ignore
+         }
+      }
+   }, []);
+
+    const [modalName, setModalName] = useState<string>('');
+    const [modalEmail, setModalEmail] = useState<string>('');
+    const [modalLanguage, setModalLanguage] = useState<string>('Français');
+    const [modalTtsProvider, setModalTtsProvider] = useState<string>('Browser');
+    const [modalElevenLabsApiKey, setModalElevenLabsApiKey] = useState<string>('');
+    const [modalElevenLabsVoiceId, setModalElevenLabsVoiceId] = useState<string>('bVsJfghVbJypxgwVISO3');
+
+    useEffect(() => {
+       if (showProfileModal) {
+          setModalName(userProfile.name);
+          setModalEmail(userProfile.email);
+          setModalLanguage(userProfile.language);
+          setModalTtsProvider(userProfile.ttsProvider || 'Browser');
+          setModalElevenLabsApiKey(userProfile.elevenLabsApiKey || '');
+          setModalElevenLabsVoiceId(userProfile.elevenLabsVoiceId || 'bVsJfghVbJypxgwVISO3');
+       }
+    }, [showProfileModal, userProfile]);
+
+   const handleSaveProfile = (profile: typeof userProfile) => {
+      setUserProfile(profile);
+      localStorage.setItem('sb_user_profile', JSON.stringify(profile));
+      setShowProfileModal(false);
+   };
+
+   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
+   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+
+   useEffect(() => {
+      return () => {
+         window.speechSynthesis.cancel();
+         if (activeAudioRef.current) {
+            activeAudioRef.current.pause();
+         }
+      };
+   }, []);
+
+   const handleToggleSpeech = async (text: string, index: number) => {
+      const LANG_MAP: Record<string, string> = {
+         'Français': 'fr-FR',
+         'English': 'en-US',
+         'Español': 'es-ES',
+         'Deutsch': 'de-DE',
+         'Italiano': 'it-IT'
+      };
+
+      if (speakingIndex === index) {
+         if (userProfile.ttsProvider === 'ElevenLabs') {
+            if (activeAudioRef.current) {
+               activeAudioRef.current.pause();
+               activeAudioRef.current = null;
+            }
+         } else {
+            window.speechSynthesis.cancel();
+         }
+         setSpeakingIndex(null);
+      } else {
+         // Cancel any ongoing playbacks
+         window.speechSynthesis.cancel();
+         if (activeAudioRef.current) {
+            activeAudioRef.current.pause();
+            activeAudioRef.current = null;
+         }
+
+         setSpeakingIndex(index);
+
+         try {
+            if (userProfile.ttsProvider === 'ElevenLabs') {
+               if (!userProfile.elevenLabsApiKey) {
+                  alert("Veuillez saisir votre clé API ElevenLabs dans les paramètres du profil.");
+                  setSpeakingIndex(null);
+                  return;
+               }
+
+               const cleanText = text.replace(/[#*`[\]()]/g, '');
+               const voiceId = userProfile.elevenLabsVoiceId || 'H17IYSiB8dvXDnAbYRT0';
+
+               const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+                  method: 'POST',
+                  headers: {
+                     'Content-Type': 'application/json',
+                     'xi-api-key': userProfile.elevenLabsApiKey
+                  },
+                  body: JSON.stringify({
+                     text: cleanText,
+                     model_id: 'eleven_multilingual_v2',
+                     voice_settings: {
+                        stability: 0.5,
+                        similarity_boost: 0.75
+                     }
+                  })
+               });
+
+               if (!response.ok) {
+                  const errText = await response.text();
+                  throw new Error(`ElevenLabs TTS request failed: ${response.statusText} - ${errText}`);
+               }
+
+               const blob = await response.blob();
+               const url = URL.createObjectURL(blob);
+               const audio = new Audio(url);
+               activeAudioRef.current = audio;
+
+               audio.onended = () => {
+                  setSpeakingIndex(null);
+                  activeAudioRef.current = null;
+               };
+               audio.onerror = () => {
+                  setSpeakingIndex(null);
+                  activeAudioRef.current = null;
+               };
+
+               await audio.play();
+            } else {
+               // Browser SpeechSynthesis
+               const cleanText = text.replace(/[#*`[\]()]/g, '');
+               const utterance = new SpeechSynthesisUtterance(cleanText);
+               utterance.lang = LANG_MAP[userProfile.language] || 'fr-FR';
+
+               utterance.onend = () => setSpeakingIndex(null);
+               utterance.onerror = () => setSpeakingIndex(null);
+
+               window.speechSynthesis.speak(utterance);
+            }
+         } catch (e: any) {
+            console.error(e);
+            alert("Erreur lors de la lecture vocale : " + e.message);
+            setSpeakingIndex(null);
+         }
+      }
+   };
+
+   const buildRawOKF = (doc: any) => {
+      const frontmatterLines = [
+         '---',
+         `type: ${doc.type || 'concept'}`,
+         `title: ${JSON.stringify(doc.title || '')}`,
+         doc.summary ? `description: ${JSON.stringify(doc.summary)}` : null,
+         doc.tags && doc.tags.length > 0 ? `tags:\n${doc.tags.map((t: string) => `  - ${t}`).join('\n')}` : null,
+         doc.createdAt ? `timestamp: ${doc.createdAt}` : null,
+         doc.category ? `category: ${doc.category}` : null,
+         doc.originalFileUri ? `originalFileUri: ${doc.originalFileUri}` : null,
+         doc.markdownFileUri ? `markdownFileUri: ${doc.markdownFileUri}` : null,
+         doc.contextNote ? `contextNote: ${JSON.stringify(doc.contextNote)}` : null,
+         '---'
+      ].filter(Boolean);
+      
+      return frontmatterLines.join('\n') + '\n' + (doc.body || '');
+   };
 
    // Import state
    const [importType, setImportType] = useState<'pdf' | 'image' | 'url' | 'text'>('pdf');
@@ -283,12 +523,73 @@ export default function Dashboard() {
          const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: updatedMessages })
+            body: JSON.stringify({ 
+               messages: updatedMessages,
+               userProfile
+            })
          });
 
-         if (res.ok) {
-            const data = await res.json();
-            setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+         if (res.ok && res.body) {
+            // Add an empty assistant message as a placeholder for streaming content
+            setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+            
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let accumulatedText = '';
+            let buffer = '';
+
+            while (true) {
+               const { done, value } = await reader.read();
+               if (done) break;
+
+               buffer += decoder.decode(value, { stream: true });
+               const lines = buffer.split('\n\n');
+               // Leave the last partial line in the buffer
+               buffer = lines.pop() || '';
+
+               for (const line of lines) {
+                  if (line.startsWith('data: ')) {
+                     const jsonStr = line.substring(6).trim();
+                     if (!jsonStr) continue;
+
+                     try {
+                        const parsed = JSON.parse(jsonStr);
+                        if (parsed.error) {
+                           setMessages(prev => {
+                              const next = [...prev];
+                              next[next.length - 1] = {
+                                 role: 'assistant',
+                                 content: 'Erreur de génération : ' + parsed.error
+                              };
+                              return next;
+                           });
+                        } else if (parsed.done) {
+                           setMessages(prev => {
+                              const next = [...prev];
+                              next[next.length - 1] = {
+                                 role: 'assistant',
+                                 content: accumulatedText,
+                                 devStats: parsed.devStats
+                              };
+                              return next;
+                           });
+                        } else if (parsed.text) {
+                           accumulatedText += parsed.text;
+                           setMessages(prev => {
+                              const next = [...prev];
+                              next[next.length - 1] = {
+                                 role: 'assistant',
+                                 content: accumulatedText
+                              };
+                              return next;
+                           });
+                        }
+                     } catch (e) {
+                        console.error('Failed to parse SSE JSON chunk', e);
+                     }
+                  }
+               }
+            }
          } else {
             setMessages(prev => [...prev, { role: 'assistant', content: 'Désolé, une erreur est survenue lors de la communication avec mon processeur Gemini.' }]);
          }
@@ -318,22 +619,22 @@ export default function Dashboard() {
       }
    };
 
-   // Delete document
-   const handleDeleteDoc = async (id: string) => {
-      if (!confirm('Voulez-vous supprimer ce document ?')) return;
-
-      try {
-         const res = await fetch(`/api/content/${id}`, {
-            method: 'DELETE'
-         });
-         if (res.ok) {
-            setDocuments(prev => prev.filter(d => d.id !== id));
-            setSelectedDoc(null);
-         }
-      } catch (err) {
-         console.error('Failed to delete document', err);
-      }
-   };
+    // Delete document execution
+    const executeDeleteDoc = async (id: string) => {
+       try {
+          const res = await fetch(`/api/content/${id}`, {
+             method: 'DELETE'
+          });
+          if (res.ok) {
+             setDocuments(prev => prev.filter(d => d.id !== id));
+             if (selectedDoc && selectedDoc.id === id) {
+                setSelectedDoc(null);
+             }
+          }
+       } catch (err) {
+          console.error('Failed to delete document', err);
+       }
+    };
 
    // Reindex all directories
    const handleReindex = async () => {
@@ -367,25 +668,64 @@ export default function Dashboard() {
       }
    };
 
-   const filteredDocs = documents.filter(doc => categoryFilter === 'all' || doc.category === categoryFilter);
+    const filteredDocs = documents.filter(doc => 
+       categoryFilter === 'all' || 
+       doc.category === categoryFilter ||
+       (doc.category && doc.category.startsWith(categoryFilter + '/'))
+    );
 
    return (
-       <div className="app-container">
+<div className="app-container">
           {/* Top Header */}
           <header style={{ padding: '24px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'linear-gradient(135deg, var(--color-vivid-green), #06b6d4)', display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center', fontWeight: 900 }}>SB</div>
                 <h1 style={{ fontSize: '24px', letterSpacing: '-0.5px' }}>Second Brain</h1>
              </div>
-             {documents.length > 0 && (
-                <div>
-                   {uploading || addingUrl ? (
-                      <IconLoader2 className="status-badge" style={{ animation: 'spin 1.5s linear infinite', color: 'var(--color-vivid-yellow)' }} />
-                   ) : uploadSuccess ? (
-                      <IconCircleCheck style={{ color: 'var(--color-vivid-green)' }} />
-                   ) : null}
-                </div>
-             )}
+             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                 <label style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', userSelect: 'none' }}>
+                    <input 
+                       type="checkbox" 
+                       checked={devMode} 
+                       onChange={(e) => {
+                          setDevMode(e.target.checked);
+                          if (!e.target.checked) setShowRawViewer(false);
+                       }} 
+                       style={{ cursor: 'pointer' }}
+                    />
+                    Mode Dev
+                 </label>
+
+                 <button
+                     onClick={() => setShowProfileModal(true)}
+                     style={{
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: '10px',
+                        width: '38px',
+                        height: '38px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                     }}
+                     title="Profil utilisateur & Langue"
+                  >
+                     <IconUser size={18} />
+                  </button>
+
+                 {documents.length > 0 && (
+                    <div>
+                       {uploading || addingUrl ? (
+                          <IconLoader2 className="status-badge" style={{ animation: 'spin 1.5s linear infinite', color: 'var(--color-vivid-yellow)' }} />
+                       ) : uploadSuccess ? (
+                          <IconCircleCheck style={{ color: 'var(--color-vivid-green)' }} />
+                       ) : null}
+                    </div>
+                 )}
+              </div>
           </header>
 
           {documents.length === 0 ? (
@@ -520,7 +860,65 @@ export default function Dashboard() {
                               borderBottomLeftRadius: msg.role === 'assistant' ? '4px' : '20px'
                            }}
                         >
-                           <p style={{ fontSize: '16px', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{msg.content}</p>
+                             <div style={{ fontSize: '16px', lineHeight: '1.5' }}>
+                                <Markdown content={msg.content} />
+                             </div>
+                             {msg.role === 'assistant' && msg.content && (
+                                <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '10px' }}>
+                                   <button
+                                      onClick={() => handleToggleSpeech(msg.content, i)}
+                                      style={{
+                                         background: 'rgba(255,255,255,0.04)',
+                                         border: '1px solid rgba(255,255,255,0.06)',
+                                         borderRadius: '8px',
+                                         padding: '4px 10px',
+                                         color: 'rgba(255,255,255,0.6)',
+                                         fontSize: '11px',
+                                         display: 'flex',
+                                         alignItems: 'center',
+                                         gap: '6px',
+                                         cursor: 'pointer',
+                                         transition: 'all 0.2s ease'
+                                      }}
+                                      title={speakingIndex === i ? "Arrêter la lecture" : "Écouter la réponse"}
+                                   >
+                                      {speakingIndex === i ? (
+                                         <>
+                                            <IconVolumeOff size={14} style={{ color: 'var(--color-vivid-yellow)' }} />
+                                            <span>Arrêter</span>
+                                         </>
+                                      ) : (
+                                         <>
+                                            <IconVolume size={14} />
+                                            <span>Écouter</span>
+                                         </>
+                                      )}
+                                   </button>
+                                </div>
+                             )}
+                             {devMode && msg.devStats && (
+                                <div style={{ 
+                                   marginTop: '10px',
+                                   paddingTop: '8px',
+                                   borderTop: '1px solid rgba(255,255,255,0.06)',
+                                   fontSize: '11px',
+                                   color: 'rgba(255,255,255,0.4)',
+                                   fontFamily: 'monospace',
+                                   display: 'flex',
+                                   flexDirection: 'column',
+                                   gap: '3px'
+                                }}>
+                                   <div>⏱️ Temps total : {msg.devStats.responseTimeMs} ms</div>
+                                   {msg.devStats.ioTimeMs !== undefined && (
+                                      <div style={{ paddingLeft: '12px' }}>└ 💾 I/O (Bdd / Fichiers) : {msg.devStats.ioTimeMs} ms</div>
+                                   )}
+                                   {msg.devStats.aiTimeMs !== undefined && (
+                                      <div style={{ paddingLeft: '12px' }}>└ 🧠 IA (Gemini API) : {msg.devStats.aiTimeMs} ms</div>
+                                   )}
+                                   <div>📚 Docs lus : {msg.devStats.metadataDocsCount} résumés, {msg.devStats.fullDocsCount} complets</div>
+                                   <div>🪙 Tokens (est.) : {msg.devStats.inputTokensEstimate} in / {msg.devStats.outputTokensEstimate} out (total : {msg.devStats.inputTokensEstimate + msg.devStats.outputTokensEstimate})</div>
+                                </div>
+                             )}
                         </div>
                      ))}
                      {sending && (
@@ -626,7 +1024,11 @@ export default function Dashboard() {
 
                   {/* Category filters */}
                   <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' }}>
-                     {['all', ...Array.from(new Set(documents.map(d => d.category).filter(Boolean)))].map(cat => (
+                     {['all', ...Array.from(new Set(documents.map(d => d.category).filter(Boolean))).filter(cat => {
+                        const lastSegment = cat.split('/').pop();
+                        const isWebsiteSubfolder = documents.some(doc => doc.type === 'website' && doc.id === lastSegment);
+                        return !isWebsiteSubfolder;
+                     })].map(cat => (
                         <button 
                            key={cat}
                            className={`status-badge ${categoryFilter === cat ? 'status-optimal' : 'status-nominal'}`}
@@ -665,6 +1067,22 @@ export default function Dashboard() {
                         {selectedDoc.contextNote && (
                            <div style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '12px', fontSize: '13px', borderLeft: '3px solid var(--color-vivid-green)', marginTop: '8px' }}>
                               <strong>Note de contexte :</strong> {selectedDoc.contextNote}
+                           </div>
+                        )}
+
+                        {selectedDoc.body && (
+                           <div style={{ 
+                              marginTop: '12px',
+                              borderTop: '1px solid rgba(255,255,255,0.08)',
+                              paddingTop: '16px',
+                              maxHeight: '350px',
+                              overflowY: 'auto',
+                              paddingRight: '8px'
+                           }}>
+                              <h4 style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '10px', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Contenu du document :</h4>
+                              <div style={{ color: 'rgba(255,255,255,0.85)' }}>
+                                 <Markdown content={selectedDoc.body} />
+                              </div>
                            </div>
                         )}
 
@@ -720,7 +1138,7 @@ export default function Dashboard() {
                               Poser une question
                            </button>
                            <button 
-                              onClick={() => handleDeleteDoc(selectedDoc.id)}
+                              onClick={() => setDocToDelete(selectedDoc)}
                               className="action-button btn-secondary"
                               style={{ width: '56px', height: '56px', padding: 0 }}
                            >
@@ -743,6 +1161,38 @@ export default function Dashboard() {
                               <IconRefresh size={16} /> Ré-explorer ce site web / Mettre à jour
                            </button>
                         )}
+
+                        {devMode && (
+                           <>
+                              <button 
+                                 onClick={() => setShowRawViewer(!showRawViewer)}
+                                 className="action-button btn-secondary"
+                                 style={{ width: '100%', height: '48px', marginTop: '10px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                              >
+                                 📄 {showRawViewer ? "Masquer le brut" : "Voir le document brut (OKF)"}
+                              </button>
+                              {showRawViewer && (
+                                 <div style={{ marginTop: '10px', width: '100%', boxSizing: 'border-box' }}>
+                                    <pre style={{
+                                       background: '#090d16',
+                                       padding: '16px',
+                                       borderRadius: '12px',
+                                       border: '1px solid rgba(255,255,255,0.08)',
+                                       fontFamily: 'monospace',
+                                       fontSize: '12px',
+                                       color: '#a9b2c3',
+                                       overflowX: 'auto',
+                                       whiteSpace: 'pre-wrap',
+                                       wordBreak: 'break-all',
+                                       margin: 0,
+                                       textAlign: 'left'
+                                    }}>
+                                       {buildRawOKF(selectedDoc)}
+                                    </pre>
+                                 </div>
+                              )}
+                           </>
+                        )}
                      </div>
                   ) : null}
 
@@ -762,35 +1212,72 @@ export default function Dashboard() {
                            >
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                                  <h3 style={{ fontSize: '18px', margin: 0, flex: 1 }}>{doc.title}</h3>
-                                 <button 
-                                    onClick={(e) => {
-                                       e.stopPropagation();
-                                       handleDeleteDoc(doc.id);
-                                    }}
-                                    style={{
-                                       background: 'none',
-                                       border: 'none',
-                                       color: 'rgba(255, 255, 255, 0.4)',
-                                       fontSize: '16px',
-                                       cursor: 'pointer',
-                                       padding: '4px 8px',
-                                       borderRadius: '8px',
-                                       transition: 'all 0.2s ease',
-                                       display: 'flex',
-                                       alignItems: 'center',
-                                       justifyContent: 'center'
-                                    }}
-                                    onMouseOver={(e) => {
-                                       e.currentTarget.style.color = '#ef4444';
-                                       e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
-                                    }}
-                                    onMouseOut={(e) => {
-                                       e.currentTarget.style.color = 'rgba(255, 255, 255, 0.4)';
-                                       e.currentTarget.style.backgroundColor = 'transparent';
-                                    }}
-                                 >
-                                    🗑
-                                 </button>
+
+                                 <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                     {doc.originalFileUri && (doc.originalFileUri.startsWith('http://') || doc.originalFileUri.startsWith('https://')) && (
+                                        <button
+                                           onClick={(e) => {
+                                              e.stopPropagation();
+                                              setImportType('url');
+                                              setUrlInput(doc.originalFileUri || '');
+                                              setCrawlDepth(0);
+                                              setShowUploadModal(true);
+                                           }}
+                                           style={{
+                                              background: 'none',
+                                              border: 'none',
+                                              color: 'rgba(255, 255, 255, 0.4)',
+                                              cursor: 'pointer',
+                                              padding: '4px 8px',
+                                              borderRadius: '8px',
+                                              transition: 'all 0.2s ease',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center'
+                                           }}
+                                           onMouseOver={(e) => {
+                                              e.currentTarget.style.color = 'var(--color-vivid-green)';
+                                              e.currentTarget.style.backgroundColor = 'rgba(0, 230, 118, 0.1)';
+                                           }}
+                                           onMouseOut={(e) => {
+                                              e.currentTarget.style.color = 'rgba(255, 255, 255, 0.4)';
+                                              e.currentTarget.style.backgroundColor = 'transparent';
+                                           }}
+                                           title="Ré-explorer / Mettre à jour ce site"
+                                        >
+                                           <IconRefresh size={16} />
+                                        </button>
+                                     )}
+                                     <button 
+                                        onClick={(e) => {
+                                           e.stopPropagation();
+                                           setDocToDelete(doc);
+                                        }}
+                                        style={{
+                                           background: 'none',
+                                           border: 'none',
+                                           color: 'rgba(255, 255, 255, 0.4)',
+                                           fontSize: '16px',
+                                           cursor: 'pointer',
+                                           padding: '4px 8px',
+                                           borderRadius: '8px',
+                                           transition: 'all 0.2s ease',
+                                           display: 'flex',
+                                           alignItems: 'center',
+                                           justifyContent: 'center'
+                                        }}
+                                        onMouseOver={(e) => {
+                                           e.currentTarget.style.color = '#ef4444';
+                                           e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+                                        }}
+                                        onMouseOut={(e) => {
+                                           e.currentTarget.style.color = 'rgba(255, 255, 255, 0.4)';
+                                           e.currentTarget.style.backgroundColor = 'transparent';
+                                        }}
+                                     >
+                                        🗑
+                                     </button>
+                                  </div>
                               </div>
                               <p className="secondary-meta" style={{ fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', margin: 0 }}>
                                  {doc.summary}
@@ -1045,6 +1532,171 @@ export default function Dashboard() {
             </div>
          )}
 
+         {showProfileModal && (
+            <div 
+               style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(9, 13, 22, 0.85)',
+                  backdropFilter: 'blur(12px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 1000,
+                  padding: '20px',
+                  boxSizing: 'border-box'
+               }}
+               onClick={(e) => {
+                  if (e.target === e.currentTarget) {
+                     setShowProfileModal(false);
+                  }
+               }}
+            >
+               <div 
+                  style={{
+                     backgroundColor: '#131924',
+                     padding: '24px',
+                     borderRadius: '24px',
+                     border: '1px solid rgba(255,255,255,0.08)',
+                     maxWidth: '450px',
+                     width: '100%',
+                     boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+                     display: 'flex',
+                     flexDirection: 'column',
+                     gap: '18px',
+                     position: 'relative'
+                  }}
+               >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <IconUser size={20} style={{ color: 'var(--color-vivid-green)' }} />
+                        <h3 style={{ fontSize: '18px', fontWeight: 'bold' }}>Profil & Préférences</h3>
+                     </div>
+                     <button 
+                        onClick={() => setShowProfileModal(false)}
+                        style={{ background: 'none', border: 'none', color: '#fff', fontSize: '18px', cursor: 'pointer', opacity: 0.6 }}
+                     >
+                        ✕
+                     </button>
+                  </div>
+
+                  <form 
+                     onSubmit={(e) => {
+                        e.preventDefault();
+                        handleSaveProfile({
+                           name: modalName,
+                           email: modalEmail,
+                           language: modalLanguage,
+                           ttsProvider: modalTtsProvider,
+                           elevenLabsApiKey: modalElevenLabsApiKey,
+                           elevenLabsVoiceId: modalElevenLabsVoiceId
+                        });
+                     }}
+                     style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
+                  >
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>Nom de l'utilisateur :</label>
+                        <input 
+                           type="text" 
+                           name="name"
+                           className="action-input"
+                           value={modalName}
+                           onChange={(e) => setModalName(e.target.value)}
+                           required
+                           style={{ width: '100%', boxSizing: 'border-box' }}
+                        />
+                     </div>
+
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>Adresse email :</label>
+                        <input 
+                           type="email" 
+                           name="email"
+                           className="action-input"
+                           value={modalEmail}
+                           onChange={(e) => setModalEmail(e.target.value)}
+                           required
+                           style={{ width: '100%', boxSizing: 'border-box' }}
+                        />
+                     </div>
+
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>Langue de communication :</label>
+                        <select 
+                           name="language"
+                           className="action-input"
+                           value={modalLanguage}
+                           onChange={(e) => setModalLanguage(e.target.value)}
+                           style={{ width: '100%', boxSizing: 'border-box', backgroundColor: '#182030', color: '#fff', border: '1px solid rgba(255,255,255,0.08)' }}
+                        >
+                           <option value="Français">Français 🇫🇷</option>
+                           <option value="English">English 🇬🇧</option>
+                           <option value="Español">Español 🇪🇸</option>
+                           <option value="Deutsch">Deutsch 🇩🇪</option>
+                           <option value="Italiano">Italiano 🇮🇹</option>
+                        </select>
+                     </div>
+
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>Moteur de synthèse vocale (TTS) :</label>
+                        <select 
+                           name="ttsProvider"
+                           className="action-input"
+                           value={modalTtsProvider}
+                           onChange={(e) => setModalTtsProvider(e.target.value)}
+                           style={{ width: '100%', boxSizing: 'border-box', backgroundColor: '#182030', color: '#fff', border: '1px solid rgba(255,255,255,0.08)' }}
+                        >
+                           <option value="Browser">Navigateur (Natif / Gratuit) 🖥️</option>
+                           <option value="ElevenLabs">ElevenLabs (Premium / Haute qualité) 🎙️</option>
+                        </select>
+                     </div>
+
+                     {modalTtsProvider === 'ElevenLabs' && (
+                        <>
+                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <label style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>Clé API ElevenLabs :</label>
+                              <input 
+                                 type="password" 
+                                 name="elevenLabsApiKey"
+                                 className="action-input"
+                                 value={modalElevenLabsApiKey}
+                                 onChange={(e) => setModalElevenLabsApiKey(e.target.value)}
+                                 placeholder="Saisissez votre xi-api-key..."
+                                 required
+                                 style={{ width: '100%', boxSizing: 'border-box' }}
+                              />
+                           </div>
+                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <label style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>ID de la Voix ElevenLabs :</label>
+                              <input 
+                                 type="text" 
+                                 name="elevenLabsVoiceId"
+                                 className="action-input"
+                                 value={modalElevenLabsVoiceId}
+                                 onChange={(e) => setModalElevenLabsVoiceId(e.target.value)}
+                                 placeholder="Saisissez l'ID de votre voix (ex: bVsJfghVbJypxgwVISO3)..."
+                                 required
+                                 style={{ width: '100%', boxSizing: 'border-box' }}
+                              />
+                           </div>
+                        </>
+                     )}
+
+                     <button 
+                        type="submit" 
+                        className="action-button" 
+                        style={{ height: '48px', fontWeight: '600', marginTop: '10px' }}
+                     >
+                        Enregistrer les préférences
+                     </button>
+                  </form>
+               </div>
+            </div>
+         )}
+
          </main>
       )}
 
@@ -1085,8 +1737,67 @@ export default function Dashboard() {
                 100% { transform: rotate(360deg); }
              }
           `}</style>
+          {/* docToDelete HTML Modal */}
+          {docToDelete && (
+             <div 
+                style={{
+                   position: 'fixed',
+                   top: 0,
+                   left: 0,
+                   right: 0,
+                   bottom: 0,
+                   backgroundColor: 'rgba(9, 13, 22, 0.85)',
+                   backdropFilter: 'blur(12px)',
+                   display: 'flex',
+                   alignItems: 'center',
+                   justifyContent: 'center',
+                   zIndex: 1100,
+                   padding: '20px',
+                   boxSizing: 'border-box'
+                }}
+             >
+                <div 
+                   style={{
+                      backgroundColor: '#131924',
+                      padding: '24px',
+                      borderRadius: '24px',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      maxWidth: '400px',
+                      width: '100%',
+                      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '16px',
+                      textAlign: 'center'
+                   }}
+                >
+                   <h3 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0, color: '#ffffff' }}>Supprimer le document</h3>
+                   <p style={{ fontSize: '14px', opacity: 0.8, margin: 0, lineHeight: '1.5', color: 'rgba(255,255,255,0.8)' }}>
+                      Êtes-vous sûr de vouloir supprimer définitivement le document <strong>"{docToDelete.title}"</strong> ? Cette action est irréversible.
+                   </p>
+                   <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                      <button 
+                         onClick={() => setDocToDelete(null)}
+                         className="action-button btn-secondary"
+                         style={{ flex: 1, height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                         Annuler
+                      </button>
+                      <button 
+                         onClick={async () => {
+                            const id = docToDelete.id;
+                            setDocToDelete(null);
+                            await executeDeleteDoc(id);
+                         }}
+                         className="action-button"
+                         style={{ flex: 1, height: '44px', backgroundColor: '#ef4444', border: 'none', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '600' }}
+                      >
+                         Supprimer
+                      </button>
+                   </div>
+                </div>
+             </div>
+          )}
        </div>
     );
  }
-
-

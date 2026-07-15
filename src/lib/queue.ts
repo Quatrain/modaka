@@ -9,6 +9,24 @@ import { Ai } from '@quatrain/ai';
 import { Backend } from '@quatrain/backend';
 import { ContentItem } from './models/ContentItem';
 import { initBackend } from './backend';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fetchHtmlWithJs } from './browser';
+
+const execPromise = promisify(exec);
+
+async function gitAddIfRepo(filePath: string) {
+   const dir = path.dirname(filePath);
+   try {
+      const { stdout } = await execPromise('git rev-parse --is-inside-work-tree', { cwd: dir });
+      if (stdout.trim() === 'true') {
+         await execPromise(`git add "${path.basename(filePath)}"`, { cwd: dir });
+         Log.info(`[Git] Added file to index: ${filePath}`);
+      }
+   } catch (e) {
+      // not a git repo or git not found, ignore silently
+   }
+}
 
 export interface Task {
    id: string;
@@ -140,6 +158,9 @@ class QueueManagerClass {
    private async executeTask(task: Task): Promise<void> {
       initBackend();
 
+      const gitLocalPath = process.env.GIT_LOCAL_PATH || path.resolve(process.cwd(), '.second-brain-git');
+      const documentStoragePath = process.env.DOCUMENT_STORAGE_PATH || path.resolve(process.cwd(), '.second-brain-docs');
+
       let rawText = '';
       let isImage = false;
       let isText = false;
@@ -192,15 +213,7 @@ class QueueManagerClass {
          
          const mainUrl = task.url;
          Log.info(`[Queue] Fetching main URL: ${mainUrl}`);
-         const response = await fetch(mainUrl, {
-            headers: {
-               'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-         });
-         if (!response.ok) {
-            throw new Error(`Impossible de récupérer le contenu de l'URL principale (${response.status})`);
-         }
-         const html = await response.text();
+         const html = await fetchHtmlWithJs(mainUrl);
          rawText = html
             .replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, '')
             .replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, '')
@@ -216,7 +229,7 @@ class QueueManagerClass {
 
          const parentPrompt = `You are a professional documentation assistant. Below is the raw text of a web page. Your task is to:
 1. Extract a concise, accurate title for the document.
-2. Determine a friendly concept type for the document (e.g. "specification", "guide", "article", "report", "manual", "note"). Use lowercase, singular.
+2. Determine a friendly concept type for the document (e.g. "website", "specification", "guide", "article", "report", "manual", "note"). Use lowercase, singular. Since this is the main entry point page of a website, you MUST use the value "website" as the type.
 3. Draft a 2-3 sentence summary.
 4. Clean and format the raw text into clean, beautiful markdown. Preserve all headings, lists, tables, code blocks, and links while removing navigation menus, headers, footers, sidebars, and advertising blocks.
 5. Suggest a hierarchical category folder path (e.g. "technology/programming/javascript", "literature/science-fiction", "finance/investment", "personal/notes", "health/fitness") that best fits the document content. The category path should use lowercase letters, numbers, and slashes for segments (do not include trailing/leading slashes, and do not use "inbox" as the top level unless no other category is appropriate).
@@ -241,6 +254,7 @@ ${rawText}
 
          // Save initial parent document
          await docStorage.create(getDocFile(parentMdRef, 'text/markdown') as any, Readable.from([parentResult.markdown]));
+         await gitAddIfRepo(path.join(documentStoragePath, parentMdRef));
 
          const parentItem = await ContentItem.factory({
             id: parentSemanticId,
@@ -256,6 +270,7 @@ ${rawText}
             createdAt: new Date().toISOString()
          });
          await parentItem.save();
+         await gitAddIfRepo(path.join(gitLocalPath, 'content', finalCategory, `${parentSemanticId}.md`));
 
          // Begin crawling level 1 & 2 conditionally based on crawlDepth
          const children: Array<{ id: string; title: string; url: string; level: number }> = [];
@@ -275,14 +290,7 @@ ${rawText}
 
                try {
                   Log.info(`[Queue] Ingesting Level 1 Sub-document: ${link1}`);
-                  const childResponse = await fetch(link1, {
-                     headers: {
-                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                     }
-                  });
-                  if (!childResponse.ok) continue;
-
-                  const childHtml = await childResponse.text();
+                  const childHtml = await fetchHtmlWithJs(link1);
                   const childRawText = childHtml
                      .replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, '')
                      .replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, '')
@@ -293,7 +301,7 @@ ${rawText}
                   const childPrompt = `You are a professional documentation assistant. Below is the raw text of a sub-page from a website. This sub-page is part of a larger parent document: "${parentResult.title}".
 Your task is to:
 1. Extract a concise, accurate title for this sub-page.
-2. Determine a friendly concept type for this sub-page (e.g. "specification", "guide", "article", "section", "note"). Use lowercase, singular.
+2. Determine a friendly concept type for this sub-page (e.g. "page", "section", "article", "note"). Use lowercase, singular. Default to "page".
 3. Draft a 2-3 sentence summary.
 4. Clean and format the raw text into clean, beautiful markdown. Preserve all headings, lists, tables, code blocks, and links.
 5. Identify 3-5 relevant keyword tags.
@@ -304,18 +312,22 @@ ${childRawText}
 ---`;
 
                   const childResult = await gemini.generateStructured(childPrompt, schema, { model });
-                  const childSemanticId = slugify(childResult.title || 'subpage') || crypto.randomUUID();
+                  const rawChildSemanticId = slugify(childResult.title || 'subpage') || crypto.randomUUID();
+                  const childSemanticId = `${parentSemanticId}-${rawChildSemanticId}`;
                   const childFileUid = crypto.randomUUID();
                   const childMdRef = `markdowns/${childFileUid}-${childSemanticId}.md`;
 
                   // Write sub-page markdown
                   await docStorage.create(getDocFile(childMdRef, 'text/markdown') as any, Readable.from([childResult.markdown]));
+                  await gitAddIfRepo(path.join(documentStoragePath, childMdRef));
+
+                  const childCategory = `${finalCategory}/${parentSemanticId}`;
 
                   const childItem = await ContentItem.factory({
                      id: childSemanticId,
                      title: childResult.title,
-                     type: childResult.type || 'note',
-                     category: finalCategory, // Keep exact same category
+                     type: childResult.type || 'page',
+                     category: childCategory,
                      tags: childResult.tags || [],
                      summary: childResult.summary,
                      parent: parentSemanticId, // Link to parent
@@ -325,8 +337,9 @@ ${childRawText}
                      createdAt: new Date().toISOString()
                   });
                   await childItem.save();
+                  await gitAddIfRepo(path.join(gitLocalPath, 'content', childCategory, `${childSemanticId}.md`));
 
-                  children.push({ id: childSemanticId, title: childResult.title, url: link1, level: 1 });
+                  children.push({ id: `${parentSemanticId}/${childSemanticId}`, title: childResult.title, url: link1, level: 1 });
 
                   // Gather level 2 links from this page
                   const subLinks = extractLinks(childHtml, link1);
@@ -357,14 +370,7 @@ ${childRawText}
 
                try {
                   Log.info(`[Queue] Ingesting Level 2 Sub-document: ${link2}`);
-                  const childResponse = await fetch(link2, {
-                     headers: {
-                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                     }
-                  });
-                  if (!childResponse.ok) continue;
-
-                  const childHtml = await childResponse.text();
+                  const childHtml = await fetchHtmlWithJs(link2);
                   const childRawText = childHtml
                      .replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, '')
                      .replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, '')
@@ -386,17 +392,21 @@ ${childRawText}
 ---`;
 
                   const childResult = await gemini.generateStructured(childPrompt, schema, { model });
-                  const childSemanticId = slugify(childResult.title || 'subpage') || crypto.randomUUID();
+                  const rawChildSemanticId = slugify(childResult.title || 'subpage') || crypto.randomUUID();
+                  const childSemanticId = `${parentSemanticId}-${rawChildSemanticId}`;
                   const childFileUid = crypto.randomUUID();
                   const childMdRef = `markdowns/${childFileUid}-${childSemanticId}.md`;
 
                   await docStorage.create(getDocFile(childMdRef, 'text/markdown') as any, Readable.from([childResult.markdown]));
+                  await gitAddIfRepo(path.join(documentStoragePath, childMdRef));
+
+                  const childCategory = `${finalCategory}/${parentSemanticId}`;
 
                   const childItem = await ContentItem.factory({
                      id: childSemanticId,
                      title: childResult.title,
-                     type: childResult.type || 'note',
-                     category: finalCategory,
+                     type: childResult.type || 'page',
+                     category: childCategory,
                      tags: childResult.tags || [],
                      summary: childResult.summary,
                      parent: parentSemanticId, // Link to parent
@@ -406,8 +416,9 @@ ${childRawText}
                      createdAt: new Date().toISOString()
                   });
                   await childItem.save();
+                  await gitAddIfRepo(path.join(gitLocalPath, 'content', childCategory, `${childSemanticId}.md`));
 
-                  children.push({ id: childSemanticId, title: childResult.title, url: link2, level: 2 });
+                  children.push({ id: `${parentSemanticId}/${childSemanticId}`, title: childResult.title, url: link2, level: 2 });
                } catch (err) {
                   Log.warn(`[Queue] Failed to crawl Level 2 link ${link2}: ${err}`);
                }
@@ -470,13 +481,15 @@ ${childRawText}
       let result;
 
       if (isImage) {
-         const imagePrompt = `You are a professional documentation assistant. Below is uploaded image. Your task is to:
-1. Extract title.
-2. concept type.
-3. 2-3 sentence summary.
-4. transcribe/describe in markdown.
-5. suggest category folder path.
-6. tags.
+         const imagePrompt = `You are a professional documentation assistant. Below is an uploaded image. Your task is to extract its metadata and transcribe/describe it.
+
+Instructions for fields:
+- "title": Clean, concise title.
+- "type": Type of concept/document (e.g., screenshot, diagram, sketch, note).
+- "summary": A concise 2-3 sentence summary.
+- "category": Suggested folder path.
+- "tags": Relevant tags.
+- "markdown": A detailed Markdown transcription or exhaustive description of the image content, including all text blocks, diagrams, annotations, and visual components.
 
 ${task.contextNote ? `Crucial User Context Note:\n- ${task.contextNote}\n` : ''}`;
 
@@ -485,13 +498,15 @@ ${task.contextNote ? `Crucial User Context Note:\n- ${task.contextNote}\n` : ''}
             mediaPart
          ], schema, { model });
       } else {
-         const textPrompt = `You are a professional documentation assistant. Below is text. Your task is to:
-1. Extract title.
-2. type.
-3. summary.
-4. markdown formatting.
-5. category path.
-6. tags.
+         const textPrompt = `You are a professional documentation assistant. Below is a raw document text. Your task is to extract its metadata and structure it.
+
+Instructions for fields:
+- "title": Clean, concise title of the document.
+- "type": Type of concept/document (e.g., resume, article, guide, recipe, etc.).
+- "summary": A concise 2-3 sentence semantic summary of the document.
+- "category": Suggested folder path (e.g., career/resume, culinary/recipes).
+- "tags": Relevant lowercase tags.
+- "markdown": You MUST generate a complete, high-fidelity, and verbatim transcription of the main content in Markdown. Do NOT summarize the content, do NOT skip sections, descriptions, bullet points, or contact info. Preserve all text detail, lists, and dates exactly as they appear in the original text, only cleaning up navigation or visual noise.
 
 ${task.contextNote ? `Crucial User Context Note:\n- ${task.contextNote}\n` : ''}
 
@@ -512,9 +527,11 @@ ${rawText}
       if (task.tempFilePath && buffer) {
          const rawRef = isImage ? `images/${fileUid}-${task.name}` : `pdfs/${fileUid}-${task.name}`;
          await docStorage.create(getDocFile(rawRef, isImage ? 'image/jpeg' : 'application/pdf') as any, Readable.from([buffer]));
+         await gitAddIfRepo(path.join(documentStoragePath, rawRef));
       }
 
       await docStorage.create(getDocFile(mdRef, 'text/markdown') as any, Readable.from([result.markdown]));
+      await gitAddIfRepo(path.join(documentStoragePath, mdRef));
 
       const finalCategory = (task.category && task.category !== 'inbox' && task.category !== 'all') 
          ? task.category 
@@ -539,6 +556,7 @@ ${rawText}
       });
 
       await contentItem.save();
+      await gitAddIfRepo(path.join(gitLocalPath, 'content', finalCategory, `${semanticId}.md`));
    }
 }
 

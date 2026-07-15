@@ -2,6 +2,18 @@
 FROM oven/bun:alpine
 WORKDIR /app
 
+# Install Chromium and basic fonts/libs for headless execution in container
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
+
+ENV CHROME_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
 # OCI standard labels
 LABEL org.opencontainers.image.title="Second Brain"
 LABEL org.opencontainers.image.description="Tactile and touch-first PWA knowledge management system"
