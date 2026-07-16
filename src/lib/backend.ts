@@ -4,6 +4,7 @@ import { OKFBackendAdapter } from '@quatrain/okf';
 import { Storage } from '@quatrain/storage';
 import { GitStorageAdapter } from '@quatrain/storage-git';
 import { LocalStorageAdapter } from '@quatrain/storage-local';
+import { S3StorageAdapter } from '@quatrain/storage-s3';
 import { AstroAdapter } from '@quatrain/api-server-astro';
 import { CrudEndpoint, ValuesEndpoint, ListEndpoint } from '@quatrain/api-server';
 import { ContentItem } from './models/ContentItem';
@@ -12,23 +13,95 @@ import { GeminiAdapter } from '@quatrain/ai-gemini';
 import * as path from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import * as fs from 'node:fs/promises';
 
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const execPromise = promisify(exec);
-let syncInterval: NodeJS.Timeout | null = null;
+const GIT_SYNC_LOCK_KEY = Symbol.for('__second_brain_git_sync_lock');
+
+async function updateReadmeChangelog(localPath: string) {
+   try {
+      // Check if origin/main exists
+      let hasOriginMain = false;
+      try {
+         await execPromise('git rev-parse --verify origin/main', { cwd: localPath });
+         hasOriginMain = true;
+      } catch (e) {
+         // origin/main doesn't exist yet
+      }
+
+      const logRange = hasOriginMain ? 'origin/main..HEAD' : 'HEAD';
+      // Format: YYYY-MM-DD: Commit message
+      const { stdout } = await execPromise(
+         `git log ${logRange} --pretty=format:"* **%cd** : %s" --date=format:"%Y-%m-%d"`,
+         { cwd: localPath }
+      );
+
+      const newEntries = stdout.trim();
+      if (!newEntries) return; // No new commits to log
+
+      // Read current README.md
+      const readmePath = path.join(localPath, 'README.md');
+      let currentContent = '';
+      try {
+         currentContent = await fs.readFile(readmePath, 'utf-8');
+      } catch (e) {
+         currentContent = '# second-brain-data\n';
+      }
+
+      const newLines = newEntries.split('\n').filter(line => line.trim().startsWith('*'));
+      if (newLines.length === 0) return;
+
+      const header = '## Journal des modifications';
+      let headerIndex = currentContent.indexOf(header);
+      let updatedContent = '';
+
+      if (headerIndex === -1) {
+         updatedContent = currentContent.trim() + '\n\n' + header + '\n\n' + newLines.join('\n') + '\n';
+      } else {
+         const beforeHeader = currentContent.substring(0, headerIndex + header.length);
+         const afterHeader = currentContent.substring(headerIndex + header.length).trim();
+         
+         const existingLines = afterHeader.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+         const uniqueNewLines = newLines.filter(line => !existingLines.includes(line.trim()));
+
+         if (uniqueNewLines.length === 0) return; // No new unique lines
+
+         updatedContent = beforeHeader.trim() + '\n\n' + uniqueNewLines.join('\n') + '\n' + (existingLines.length > 0 ? existingLines.join('\n') + '\n' : '');
+      }
+
+      await fs.writeFile(readmePath, updatedContent, 'utf-8');
+      await execPromise('git add README.md', { cwd: localPath });
+      await execPromise('git commit -m "docs: update changelog in README.md [skip ci]"', { cwd: localPath });
+      Log.info('[Git Sync] Changelog updated in README.md');
+   } catch (err: any) {
+      Log.warn(`[Git Sync] Failed to update README.md changelog: ${err.message}`);
+   }
+}
 
 async function syncGitRepository(localPath: string) {
+   if ((globalThis as any)[GIT_SYNC_LOCK_KEY]) {
+      Log.debug(`[Git Sync] Sync already in progress, skipping`);
+      return;
+   }
+   (globalThis as any)[GIT_SYNC_LOCK_KEY] = true;
    try {
       Log.info(`[Git Sync] Synchronisant le dépôt Git local-first...`);
       await execPromise('git fetch origin', { cwd: localPath });
+      
+      // Update changelog in README.md based on new local commits before pulling/pushing
+      await updateReadmeChangelog(localPath);
+
       await execPromise('git pull --rebase origin main', { cwd: localPath });
       await execPromise('git push origin main', { cwd: localPath });
       Log.info(`[Git Sync] Synchronisation terminée avec succès`);
    } catch (err: any) {
       Log.warn(`[Git Sync] Échec de la synchronisation en arrière-plan : ${err.message}`);
+   } finally {
+      (globalThis as any)[GIT_SYNC_LOCK_KEY] = false;
    }
 }
 
@@ -53,12 +126,27 @@ export function initBackend() {
    const gitLocalPath = process.env.GIT_LOCAL_PATH || path.resolve(process.cwd(), '.second-brain-git');
    const documentStoragePath = process.env.DOCUMENT_STORAGE_PATH || path.resolve(process.cwd(), '.second-brain-docs');
 
-   // 1. Initialize Document Storage (LocalStorageAdapter)
-   const docAdapter = new LocalStorageAdapter({
-      config: { bucket: 'documents' },
-      basePath: documentStoragePath
-   } as any);
-   Storage.addStorage(docAdapter, 'document-storage', false);
+    // 1. Initialize Document Storage (S3StorageAdapter with LocalStorageAdapter fallback)
+    let docAdapter: any;
+    if (process.env.S3_ACCESS_KEY && process.env.S3_SECRET_KEY) {
+       docAdapter = new S3StorageAdapter({
+          config: {
+             region: process.env.S3_REGION || 'us-east-1',
+             endpoint: process.env.S3_ENDPOINT,
+             accesskey: process.env.S3_ACCESS_KEY,
+             secret: process.env.S3_SECRET_KEY,
+             bucket: process.env.S3_BUCKET || 'second-brain'
+          }
+       } as any);
+       Log.info(`Document storage configured with S3StorageAdapter on bucket '${process.env.S3_BUCKET || 'second-brain'}'`);
+    } else {
+       docAdapter = new LocalStorageAdapter({
+          config: { bucket: 'documents' },
+          basePath: documentStoragePath
+       } as any);
+       Log.info('Document storage configured with LocalStorageAdapter (S3 environment variables not set)');
+    }
+    Storage.addStorage(docAdapter, 'document-storage', false);
 
    // 2. Initialize Git Metadata Storage (GitStorageAdapter)
    const gitAdapter = new GitStorageAdapter({
@@ -69,7 +157,8 @@ export function initBackend() {
          owner: process.env.GIT_REPO_OWNER,
          repo: process.env.GIT_REPO_NAME,
          branch: process.env.GIT_BRANCH || 'main',
-         bucket: 'metadata'
+         bucket: 'metadata',
+         noPush: true
       }
    } as any);
    Storage.addStorage(gitAdapter, 'git-storage', true);
@@ -99,12 +188,16 @@ export function initBackend() {
 
    // Start background synchronization in local mode
    if (gitMode === 'local' && gitLocalPath) {
-      syncGitRepository(gitLocalPath);
-      syncInterval = setInterval(() => {
+      const GIT_SYNC_INTERVAL_KEY = Symbol.for('__second_brain_git_sync_interval');
+      if (!(globalThis as any)[GIT_SYNC_INTERVAL_KEY]) {
          syncGitRepository(gitLocalPath);
-      }, 30000);
-      if (syncInterval && typeof syncInterval.unref === 'function') {
-         syncInterval.unref();
+         const interval = setInterval(() => {
+            syncGitRepository(gitLocalPath);
+         }, 30000);
+         if (interval && typeof interval.unref === 'function') {
+            interval.unref();
+         }
+         (globalThis as any)[GIT_SYNC_INTERVAL_KEY] = interval;
       }
    }
 

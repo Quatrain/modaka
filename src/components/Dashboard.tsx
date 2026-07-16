@@ -13,7 +13,8 @@ import {
    IconRefresh,
    IconUser,
    IconVolume,
-   IconVolumeOff
+   IconVolumeOff,
+   IconTrash
 } from '@tabler/icons-react';
 
 interface ContentItemData {
@@ -93,7 +94,41 @@ function Markdown({ content }: { content: string }) {
    return <div style={{ display: 'flex', flexDirection: 'column' }}>{elements}</div>;
 }
 
-export default function Dashboard() {
+function formatRelativeDate(dateString?: string): string {
+   if (!dateString) return '';
+   try {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      if (diffMs < 0) {
+         return date.toLocaleDateString();
+      }
+
+      const diffSec = Math.floor(diffMs / 1000);
+      const diffMin = Math.floor(diffSec / 60);
+      const diffHrs = Math.floor(diffMin / 60);
+      const diffDays = Math.floor(diffHrs / 24);
+
+      if (diffDays < 3) {
+         if (diffSec < 60) {
+            return "À l'instant";
+         }
+         if (diffMin < 60) {
+            return `Il y a ${diffMin} min`;
+         }
+         if (diffHrs < 24) {
+            return `Il y a ${diffHrs} h`;
+         }
+         return `Il y a ${diffDays} jour${diffDays > 1 ? 's' : ''}`;
+      }
+
+      return date.toLocaleDateString();
+   } catch (e) {
+      return '';
+   }
+}
+
+export default function Dashboard({ initialDevMode = false }: { initialDevMode?: boolean }) {
    const [activeTab, setActiveTab] = useState<'chat' | 'docs' | 'stats'>('chat');
    const [documents, setDocuments] = useState<ContentItemData[]>([]);
    const [uploading, setUploading] = useState(false);
@@ -104,7 +139,7 @@ export default function Dashboard() {
    const [reindexing, setReindexing] = useState(false);
    const [queueTasks, setQueueTasks] = useState<any[]>([]);
    const [crawlDepth, setCrawlDepth] = useState<number>(0);
-   const [devMode, setDevMode] = useState<boolean>(false);
+   const [devMode, setDevMode] = useState<boolean>(initialDevMode);
    const [showRawViewer, setShowRawViewer] = useState<boolean>(false);
    const [docToDelete, setDocToDelete] = useState<ContentItemData | null>(null);
    const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
@@ -132,12 +167,94 @@ export default function Dashboard() {
       }
    }, []);
 
+   // Sync devMode from cookie on load (client-side backup)
+   useEffect(() => {
+      const getCookie = (name: string) => {
+         const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+         return match ? match[2] : null;
+      };
+      const savedDevMode = getCookie('sb_dev_mode');
+      if (savedDevMode === 'true') {
+         setDevMode(true);
+      } else if (savedDevMode === 'false') {
+         setDevMode(false);
+      }
+   }, []);
+
+   // Sync state from URL hash
+   useEffect(() => {
+      const handleHashChange = () => {
+         const hash = window.location.hash;
+         if (!hash) {
+            // Default if no hash
+            window.location.hash = '#/chat';
+            return;
+         }
+
+         if (hash.startsWith('#/docs/')) {
+            const docId = hash.substring(7);
+            setActiveTab('docs');
+            if (documents.length > 0) {
+               const doc = documents.find(d => d.id === docId);
+               if (doc) {
+                  setSelectedDoc(doc);
+               }
+            }
+         } else if (hash === '#/docs') {
+            setActiveTab('docs');
+            setSelectedDoc(null);
+         } else if (hash === '#/chat') {
+            setActiveTab('chat');
+            setSelectedDoc(null);
+         } else if (hash === '#/stats') {
+            setActiveTab('stats');
+            setSelectedDoc(null);
+         }
+      };
+
+      window.addEventListener('hashchange', handleHashChange);
+      handleHashChange();
+
+      return () => {
+         window.removeEventListener('hashchange', handleHashChange);
+      };
+   }, [documents]);
+
+   // Update hash when activeTab or selectedDoc changes
+   useEffect(() => {
+      if (activeTab === 'docs') {
+         if (selectedDoc) {
+            const targetHash = `#/docs/${selectedDoc.id}`;
+            if (window.location.hash !== targetHash) {
+               window.location.hash = targetHash;
+            }
+         } else {
+            const targetHash = '#/docs';
+            if (window.location.hash !== targetHash) {
+               window.location.hash = targetHash;
+            }
+         }
+      } else if (activeTab === 'chat') {
+         const targetHash = '#/chat';
+         if (window.location.hash !== targetHash) {
+            window.location.hash = targetHash;
+         }
+      } else if (activeTab === 'stats') {
+         const targetHash = '#/stats';
+         if (window.location.hash !== targetHash) {
+            window.location.hash = targetHash;
+         }
+      }
+   }, [activeTab, selectedDoc]);
+
     const [modalName, setModalName] = useState<string>('');
     const [modalEmail, setModalEmail] = useState<string>('');
     const [modalLanguage, setModalLanguage] = useState<string>('Français');
     const [modalTtsProvider, setModalTtsProvider] = useState<string>('Browser');
     const [modalElevenLabsApiKey, setModalElevenLabsApiKey] = useState<string>('');
     const [modalElevenLabsVoiceId, setModalElevenLabsVoiceId] = useState<string>('bVsJfghVbJypxgwVISO3');
+    const [searchQuery, setSearchQuery] = useState<string>('');
+    const [showCategoryModal, setShowCategoryModal] = useState<boolean>(false);
 
     useEffect(() => {
        if (showProfileModal) {
@@ -283,7 +400,7 @@ export default function Dashboard() {
 
    // Import state
    const [importType, setImportType] = useState<'pdf' | 'image' | 'url' | 'text'>('pdf');
-   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
    const [urlInput, setUrlInput] = useState('');
    const [markdownInput, setMarkdownInput] = useState('');
    const [contextNoteInput, setContextNoteInput] = useState('');
@@ -444,15 +561,17 @@ export default function Dashboard() {
             setUploading(false);
          }
       } else {
-         if (!selectedFile) return;
+         if (selectedFiles.length === 0) return;
          setUploading(true);
          setUploadSuccess(false);
-
+ 
          const formData = new FormData();
-         formData.append('file', selectedFile);
+         for (const file of selectedFiles) {
+            formData.append('file', file);
+         }
          formData.append('category', categoryFilter === 'all' ? 'inbox' : categoryFilter);
          formData.append('contextNote', contextNoteInput.trim());
-
+ 
          try {
             const res = await fetch('/api/upload', {
                method: 'POST',
@@ -460,14 +579,15 @@ export default function Dashboard() {
             });
             if (res.ok) {
                const data = await res.json();
-               setSelectedFile(null);
+               setSelectedFiles([]);
                setContextNoteInput('');
                setUploadSuccess(true);
                setShowUploadModal(false);
                fetchQueue();
+               const filesLabel = selectedFiles.map(f => `"${f.name}"`).join(', ');
                setMessages(prev => [
                   ...prev,
-                  { role: 'assistant', content: `Traitement du fichier "${selectedFile.name}" lancé en arrière-plan. Suivez l'analyse dans la file d'attente d'importation.` }
+                  { role: 'assistant', content: `Traitement des fichiers (${filesLabel}) lancé en arrière-plan. Suivez l'analyse dans la file d'attente d'importation.` }
                ]);
                setTimeout(() => setUploadSuccess(false), 3000);
             } else {
@@ -668,11 +788,22 @@ export default function Dashboard() {
       }
    };
 
-    const filteredDocs = documents.filter(doc => 
-       categoryFilter === 'all' || 
-       doc.category === categoryFilter ||
-       (doc.category && doc.category.startsWith(categoryFilter + '/'))
-    );
+    const filteredDocs = documents.filter(doc => {
+       const matchesCategory = categoryFilter === 'all' || 
+          doc.category === categoryFilter ||
+          (doc.category && doc.category.startsWith(categoryFilter + '/'));
+       
+       if (!matchesCategory) return false;
+       if (!searchQuery.trim()) return true;
+       
+       const q = searchQuery.toLowerCase();
+       return (
+          doc.title?.toLowerCase().includes(q) ||
+          doc.summary?.toLowerCase().includes(q) ||
+          doc.body?.toLowerCase().includes(q) ||
+          doc.tags?.some(tag => tag.toLowerCase().includes(q))
+       );
+    });
 
    return (
 <div className="app-container">
@@ -683,18 +814,44 @@ export default function Dashboard() {
                 <h1 style={{ fontSize: '24px', letterSpacing: '-0.5px' }}>Second Brain</h1>
              </div>
              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                 <label style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', userSelect: 'none' }}>
-                    <input 
-                       type="checkbox" 
-                       checked={devMode} 
-                       onChange={(e) => {
-                          setDevMode(e.target.checked);
-                          if (!e.target.checked) setShowRawViewer(false);
-                       }} 
-                       style={{ cursor: 'pointer' }}
-                    />
-                    Mode Dev
-                 </label>
+                  <div 
+                     style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}
+                     onClick={() => {
+                        const next = !devMode;
+                        setDevMode(next);
+                        document.cookie = `sb_dev_mode=${next}; path=/; max-age=31536000; SameSite=Lax`;
+                        if (!next) setShowRawViewer(false);
+                     }}
+                  >
+                     <span style={{ fontSize: '13px', color: devMode ? '#ffffff' : 'rgba(255,255,255,0.5)', fontWeight: '500', transition: 'color 0.2s' }}>Mode Dev</span>
+                     <div 
+                        style={{
+                           width: '40px',
+                           height: '22px',
+                           borderRadius: '11px',
+                           backgroundColor: devMode ? 'var(--color-vivid-green)' : 'rgba(255,255,255,0.08)',
+                           border: '1px solid rgba(255,255,255,0.1)',
+                           position: 'relative',
+                           display: 'flex',
+                           alignItems: 'center',
+                           padding: '2px',
+                           boxSizing: 'border-box',
+                           transition: 'background-color 0.2s'
+                        }}
+                     >
+                        <div 
+                           style={{
+                              width: '16px',
+                              height: '16px',
+                              borderRadius: '50%',
+                              backgroundColor: '#ffffff',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                              transform: devMode ? 'translateX(18px)' : 'translateX(0)',
+                              transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                           }}
+                        />
+                      </div>
+                  </div>
 
                  <button
                      onClick={() => setShowProfileModal(true)}
@@ -1022,182 +1179,223 @@ export default function Dashboard() {
                      </div>
                   )}
 
-                  {/* Category filters */}
-                  <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' }}>
-                     {['all', ...Array.from(new Set(documents.map(d => d.category).filter(Boolean))).filter(cat => {
-                        const lastSegment = cat.split('/').pop();
-                        const isWebsiteSubfolder = documents.some(doc => doc.type === 'website' && doc.id === lastSegment);
-                        return !isWebsiteSubfolder;
-                     })].map(cat => (
-                        <button 
-                           key={cat}
-                           className={`status-badge ${categoryFilter === cat ? 'status-optimal' : 'status-nominal'}`}
-                           onClick={() => setCategoryFilter(cat)}
-                           style={{ border: 'none', cursor: 'pointer', padding: '8px 16px', fontSize: '13px', whiteSpace: 'nowrap' }}
-                        >
-                           {cat}
-                        </button>
-                     ))}
+                  {/* Search and Category Filter Toolbar */}
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
+                     <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
+                        <input 
+                           type="text"
+                           placeholder="Rechercher par mot-clé (titre, résumé, contenu, tag)..."
+                           value={searchQuery}
+                           onChange={(e) => setSearchQuery(e.target.value)}
+                           className="action-input"
+                           style={{ width: '100%', boxSizing: 'border-box', paddingLeft: '36px', height: '42px', fontSize: '14px' }}
+                        />
+                        <span style={{ position: 'absolute', left: '12px', top: '11px', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>🔍</span>
+                     </div>
+                     <button
+                        onClick={() => setShowCategoryModal(true)}
+                        className="action-button btn-secondary"
+                        style={{ height: '42px', padding: '0 16px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', whiteSpace: 'nowrap', border: '1px solid rgba(255,255,255,0.08)' }}
+                     >
+                        📁 Catégorie : <span style={{ fontWeight: 'bold', color: 'var(--color-vivid-green)' }}>{categoryFilter === 'all' ? 'Toutes' : categoryFilter}</span>
+                     </button>
                   </div>
 
-                  {selectedDoc ? (
-                     /* Document detail overlay/card */
-                     <div className={getCategoryCardClass(selectedDoc.category)} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                           <h2 style={{ fontSize: '20px' }}>{selectedDoc.title}</h2>
-                           <button 
-                              onClick={() => setSelectedDoc(null)} 
-                              style={{ background: 'none', border: 'none', color: '#fff', fontSize: '16px', fontWeight: 900, cursor: 'pointer' }}
-                           >
-                              ✕
-                           </button>
-                        </div>
-                        
-                        <p style={{ fontSize: '15px', opacity: 0.9, lineHeight: '1.6' }}>{selectedDoc.summary}</p>
-                        
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                           {selectedDoc.tags?.map((t, idx) => (
-                              <span key={idx} className="status-badge status-nominal" style={{ fontSize: '11px', padding: '4px 10px' }}>
-                                 <IconTag size={10} style={{ marginRight: '4px' }} />
-                                 {t}
-                              </span>
-                           ))}
-                        </div>
+                  {selectedDoc && (
+                      <div 
+                         style={{
+                            position: 'fixed',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backgroundColor: 'rgba(9, 13, 22, 0.85)',
+                            backdropFilter: 'blur(12px)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 1000,
+                            padding: '20px',
+                            boxSizing: 'border-box'
+                         }}
+                         onClick={(e) => {
+                            if (e.target === e.currentTarget) {
+                               setSelectedDoc(null);
+                            }
+                         }}
+                      >
+                         <div 
+                            className={getCategoryCardClass(selectedDoc.category)} 
+                            style={{ 
+                               display: 'flex', 
+                               flexDirection: 'column', 
+                               gap: '16px',
+                               maxWidth: '750px',
+                               width: '100%',
+                               maxHeight: '90vh',
+                               overflowY: 'auto',
+                               padding: '28px',
+                               borderRadius: '24px',
+                               border: '1px solid rgba(255,255,255,0.08)',
+                               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+                               position: 'relative',
+                               textAlign: 'left'
+                            }}
+                         >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                               <h2 style={{ fontSize: '22px', fontWeight: 'bold', margin: 0 }}>{selectedDoc.title}</h2>
+                               <button 
+                                  onClick={() => setSelectedDoc(null)} 
+                                  style={{ background: 'none', border: 'none', color: '#fff', fontSize: '18px', fontWeight: 900, cursor: 'pointer', opacity: 0.6 }}
+                               >
+                                  ✕
+                               </button>
+                            </div>
+                            
+                            <p style={{ fontSize: '15px', opacity: 0.9, lineHeight: '1.6', margin: 0 }}>{selectedDoc.summary}</p>
+                            
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                               {selectedDoc.tags?.map((t, idx) => (
+                                  <span key={idx} className="status-badge status-nominal" style={{ fontSize: '11px', padding: '4px 10px' }}>
+                                     <IconTag size={10} style={{ marginRight: '4px' }} />
+                                     {t}
+                                  </span>
+                               ))}
+                            </div>
 
-                        {selectedDoc.contextNote && (
-                           <div style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '12px', fontSize: '13px', borderLeft: '3px solid var(--color-vivid-green)', marginTop: '8px' }}>
-                              <strong>Note de contexte :</strong> {selectedDoc.contextNote}
-                           </div>
-                        )}
+                            {selectedDoc.contextNote && (
+                               <div style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '12px', fontSize: '13px', borderLeft: '3px solid var(--color-vivid-green)', marginTop: '8px' }}>
+                                  <strong>Note de contexte :</strong> {selectedDoc.contextNote}
+                               </div>
+                            )}
 
-                        {selectedDoc.body && (
-                           <div style={{ 
-                              marginTop: '12px',
-                              borderTop: '1px solid rgba(255,255,255,0.08)',
-                              paddingTop: '16px',
-                              maxHeight: '350px',
-                              overflowY: 'auto',
-                              paddingRight: '8px'
-                           }}>
-                              <h4 style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '10px', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Contenu du document :</h4>
-                              <div style={{ color: 'rgba(255,255,255,0.85)' }}>
-                                 <Markdown content={selectedDoc.body} />
-                              </div>
-                           </div>
-                        )}
+                            {selectedDoc.body && (
+                               <div style={{ 
+                                  marginTop: '12px',
+                                  borderTop: '1px solid rgba(255,255,255,0.08)',
+                                  paddingTop: '16px',
+                                  color: 'rgba(255,255,255,0.85)'
+                               }}>
+                                  <h4 style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '10px', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Contenu du document :</h4>
+                                  <div style={{ color: 'rgba(255,255,255,0.85)', lineHeight: '1.6' }}>
+                                     <Markdown content={selectedDoc.body} />
+                                  </div>
+                               </div>
+                            )}
 
-                        {/* Move category actions */}
-                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                           <p className="secondary-meta" style={{ fontSize: '13px' }}>Classer le document :</p>
-                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                              {['inbox', 'work', 'personal', 'urgent', ...Array.from(new Set(documents.map(d => d.category).filter(Boolean)))].filter((value, index, self) => self.indexOf(value) === index).map(cat => (
-                                 <button 
-                                    key={cat}
-                                    onClick={() => handleUpdateCategory(selectedDoc, cat)}
-                                    className={`status-badge ${selectedDoc.category === cat ? 'status-optimal' : 'status-nominal'}`}
-                                    style={{ border: 'none', cursor: 'pointer', padding: '6px 12px', fontSize: '12px' }}
-                                 >
-                                    {cat}
-                                 </button>
-                              ))}
-                           </div>
-                           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                              <input 
-                                 type="text" 
-                                 placeholder="Créer/Déplacer vers un dossier personnalisé (ex: literature/sci-fi)..."
-                                 className="action-input"
-                                 style={{ height: '36px', fontSize: '13px', padding: '0 12px', flex: 1 }}
-                                 onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                       e.preventDefault();
-                                       const inputVal = (e.target as HTMLInputElement).value.trim();
-                                       if (inputVal) {
-                                          handleUpdateCategory(selectedDoc, inputVal);
-                                          (e.target as HTMLInputElement).value = '';
-                                       }
-                                    }
-                                 }}
-                              />
-                           </div>
-                        </div>
+                            {/* Move category actions */}
+                            <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                               <p className="secondary-meta" style={{ fontSize: '13px', margin: 0 }}>Classer le document :</p>
+                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                  {['inbox', 'work', 'personal', 'urgent', ...Array.from(new Set(documents.map(d => d.category).filter(Boolean)))].filter((value, index, self) => self.indexOf(value) === index).map(cat => (
+                                     <button 
+                                        key={cat}
+                                        onClick={() => handleUpdateCategory(selectedDoc, cat)}
+                                        className={`status-badge ${selectedDoc.category === cat ? 'status-optimal' : 'status-nominal'}`}
+                                        style={{ border: 'none', cursor: 'pointer', padding: '6px 12px', fontSize: '12px' }}
+                                     >
+                                        {cat}
+                                     </button>
+                                  ))}
+                               </div>
+                               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                  <input 
+                                     type="text" 
+                                     placeholder="Créer/Déplacer vers un dossier personnalisé (ex: literature/sci-fi)..."
+                                     className="action-input"
+                                     style={{ height: '36px', fontSize: '13px', padding: '0 12px', flex: 1 }}
+                                     onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                           e.preventDefault();
+                                           const inputVal = (e.target as HTMLInputElement).value.trim();
+                                           if (inputVal) {
+                                              handleUpdateCategory(selectedDoc, inputVal);
+                                              (e.target as HTMLInputElement).value = '';
+                                           }
+                                        }
+                                     }}
+                                  />
+                               </div>
+                            </div>
 
-                        <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                           <button 
-                              onClick={() => {
-                                 setSelectedDoc(null);
-                                 setMessages(prev => [
-                                    ...prev,
-                                    { role: 'user', content: `Parle-moi du document : "${selectedDoc.title}"` }
-                                 ]);
-                                 setActiveTab('chat');
-                              }}
-                              className="action-button"
-                              style={{ flex: 1, height: '56px', fontSize: '15px' }}
-                           >
-                              <IconMessage size={18} />
-                              Poser une question
-                           </button>
-                           <button 
-                              onClick={() => setDocToDelete(selectedDoc)}
-                              className="action-button btn-secondary"
-                              style={{ width: '56px', height: '56px', padding: 0 }}
-                           >
-                              🗑
-                           </button>
-                        </div>
+                            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                               <button 
+                                  onClick={() => {
+                                     setSelectedDoc(null);
+                                     setMessages(prev => [
+                                        ...prev,
+                                        { role: 'user', content: `Parle-moi du document : "${selectedDoc.title}"` }
+                                     ]);
+                                     setActiveTab('chat');
+                                  }}
+                                  className="action-button"
+                                  style={{ flex: 1, height: '56px', fontSize: '15px' }}
+                               >
+                                  <IconMessage size={18} />
+                                  Poser une question
+                               </button>
+                               <button 
+                                  onClick={() => setDocToDelete(selectedDoc)}
+                                  className="action-button btn-secondary"
+                                  style={{ width: '56px', height: '56px', padding: 0 }}
+                               >
+                                  <IconTrash size={24} />
+                               </button>
+                            </div>
 
-                        {selectedDoc.originalFileUri && (selectedDoc.originalFileUri.startsWith('http://') || selectedDoc.originalFileUri.startsWith('https://')) && (
-                           <button 
-                              onClick={() => {
-                                 setSelectedDoc(null);
-                                 setImportType('url');
-                                 setUrlInput(selectedDoc.originalFileUri || '');
-                                 setCrawlDepth(0);
-                                 setShowUploadModal(true);
-                              }}
-                              className="action-button btn-secondary"
-                              style={{ width: '100%', height: '48px', marginTop: '10px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                           >
-                              <IconRefresh size={16} /> Ré-explorer ce site web / Mettre à jour
-                           </button>
-                        )}
+                            {selectedDoc.originalFileUri && (selectedDoc.originalFileUri.startsWith('http://') || selectedDoc.originalFileUri.startsWith('https://')) && (
+                               <button 
+                                  onClick={() => {
+                                     setSelectedDoc(null);
+                                     setImportType('url');
+                                     setUrlInput(selectedDoc.originalFileUri || '');
+                                     setCrawlDepth(0);
+                                     setShowUploadModal(true);
+                                  }}
+                                  className="action-button btn-secondary"
+                                  style={{ width: '100%', height: '48px', marginTop: '10px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                               >
+                                  <IconRefresh size={16} /> Ré-explorer ce site web / Mettre à jour
+                               </button>
+                            )}
 
-                        {devMode && (
-                           <>
-                              <button 
-                                 onClick={() => setShowRawViewer(!showRawViewer)}
-                                 className="action-button btn-secondary"
-                                 style={{ width: '100%', height: '48px', marginTop: '10px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                              >
-                                 📄 {showRawViewer ? "Masquer le brut" : "Voir le document brut (OKF)"}
-                              </button>
-                              {showRawViewer && (
-                                 <div style={{ marginTop: '10px', width: '100%', boxSizing: 'border-box' }}>
-                                    <pre style={{
-                                       background: '#090d16',
-                                       padding: '16px',
-                                       borderRadius: '12px',
-                                       border: '1px solid rgba(255,255,255,0.08)',
-                                       fontFamily: 'monospace',
-                                       fontSize: '12px',
-                                       color: '#a9b2c3',
-                                       overflowX: 'auto',
-                                       whiteSpace: 'pre-wrap',
-                                       wordBreak: 'break-all',
-                                       margin: 0,
-                                       textAlign: 'left'
-                                    }}>
-                                       {buildRawOKF(selectedDoc)}
-                                    </pre>
-                                 </div>
-                              )}
-                           </>
-                        )}
-                     </div>
-                  ) : null}
+                            {devMode && (
+                               <>
+                                  <button 
+                                     onClick={() => setShowRawViewer(!showRawViewer)}
+                                     className="action-button btn-secondary"
+                                     style={{ width: '100%', height: '48px', marginTop: '10px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                                  >
+                                     📄 {showRawViewer ? "Masquer le brut" : "Voir le document brut (OKF)"}
+                                  </button>
+                                  {showRawViewer && (
+                                     <div style={{ marginTop: '10px', width: '100%', boxSizing: 'border-box' }}>
+                                        <pre style={{
+                                           background: '#090d16',
+                                           padding: '16px',
+                                           borderRadius: '12px',
+                                           border: '1px solid rgba(255,255,255,0.08)',
+                                           fontFamily: 'monospace',
+                                           fontSize: '12px',
+                                           color: '#a9b2c3',
+                                           overflowX: 'auto',
+                                           whiteSpace: 'pre-wrap',
+                                           wordBreak: 'break-all',
+                                           margin: 0,
+                                           textAlign: 'left'
+                                        }}>
+                                           {buildRawOKF(selectedDoc)}
+                                        </pre>
+                                     </div>
+                                  )}
+                               </>
+                            )}
+                         </div>
+                      </div>
+                   )}
 
                   {/* Documents feed */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px' }}>
                      {filteredDocs.length === 0 ? (
                         <div className="card-grey" style={{ textAlign: 'center', padding: '40px' }}>
                            <p className="secondary-meta">Aucun document dans cette catégorie.</p>
@@ -1257,7 +1455,6 @@ export default function Dashboard() {
                                            background: 'none',
                                            border: 'none',
                                            color: 'rgba(255, 255, 255, 0.4)',
-                                           fontSize: '16px',
                                            cursor: 'pointer',
                                            padding: '4px 8px',
                                            borderRadius: '8px',
@@ -1274,20 +1471,21 @@ export default function Dashboard() {
                                            e.currentTarget.style.color = 'rgba(255, 255, 255, 0.4)';
                                            e.currentTarget.style.backgroundColor = 'transparent';
                                         }}
+                                        title="Supprimer ce document"
                                      >
-                                        🗑
+                                        <IconTrash size={16} />
                                      </button>
                                   </div>
                               </div>
-                              <p className="secondary-meta" style={{ fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', margin: 0 }}>
+                              <p className="secondary-meta" style={{ fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', margin: 0, flex: 1 }}>
                                  {doc.summary}
                               </p>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '8px' }}>
                                  <span className="status-badge status-nominal" style={{ fontSize: '11px', padding: '4px 10px' }}>
                                     {doc.category}
                                  </span>
                                  <span className="secondary-meta" style={{ fontSize: '12px' }}>
-                                    {doc.createdAt ? new Date(doc.createdAt).toLocaleDateString() : ''}
+                                    {formatRelativeDate(doc.createdAt)}
                                  </span>
                               </div>
                            </div>
@@ -1440,28 +1638,34 @@ export default function Dashboard() {
                   <form onSubmit={handleUnifiedImport} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                      {importType === 'pdf' ? (
                         <div>
-                           <label style={{ display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center', height: '48px', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: '12px', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.01)', transition: 'border-color 0.2s', width: '100%' }}>
-                              <span style={{ fontSize: '14px', color: selectedFile ? 'var(--color-vivid-green)' : 'rgba(255,255,255,0.5)', padding: '0 12px', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                 {selectedFile ? `Fichier : ${selectedFile.name}` : 'Sélectionner un fichier PDF...'}
+                           <label style={{ display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center', height: 'auto', minHeight: '48px', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: '12px', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.01)', transition: 'border-color 0.2s', width: '100%', padding: '8px 12px', boxSizing: 'border-box' }}>
+                              <span style={{ fontSize: '14px', color: selectedFiles.length > 0 ? 'var(--color-vivid-green)' : 'rgba(255,255,255,0.5)', textAlign: 'center', wordBreak: 'break-word' }}>
+                                 {selectedFiles.length > 0 
+                                    ? `Fichiers (${selectedFiles.length}) : ${selectedFiles.map(f => f.name).join(', ')}` 
+                                    : 'Sélectionner un ou plusieurs fichiers PDF...'}
                               </span>
                               <input 
                                  type="file" 
                                  accept=".pdf" 
-                                 onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} 
+                                 multiple
+                                 onChange={(e) => setSelectedFiles(Array.from(e.target.files || []))} 
                                  style={{ display: 'none' }} 
                               />
                            </label>
                         </div>
                      ) : importType === 'image' ? (
                         <div>
-                           <label style={{ display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center', height: '48px', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: '12px', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.01)', transition: 'border-color 0.2s', width: '100%' }}>
-                              <span style={{ fontSize: '14px', color: selectedFile ? 'var(--color-vivid-green)' : 'rgba(255,255,255,0.5)', padding: '0 12px', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                 {selectedFile ? `Photo : ${selectedFile.name}` : 'Prendre une photo ou choisir une image...'}
+                           <label style={{ display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center', height: 'auto', minHeight: '48px', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: '12px', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.01)', transition: 'border-color 0.2s', width: '100%', padding: '8px 12px', boxSizing: 'border-box' }}>
+                              <span style={{ fontSize: '14px', color: selectedFiles.length > 0 ? 'var(--color-vivid-green)' : 'rgba(255,255,255,0.5)', textAlign: 'center', wordBreak: 'break-word' }}>
+                                 {selectedFiles.length > 0 
+                                    ? `Images (${selectedFiles.length}) : ${selectedFiles.map(f => f.name).join(', ')}` 
+                                    : 'Prendre ou sélectionner une ou plusieurs images...'}
                               </span>
                               <input 
                                  type="file" 
                                  accept="image/*" 
-                                 onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} 
+                                 multiple
+                                 onChange={(e) => setSelectedFiles(Array.from(e.target.files || []))} 
                                  style={{ display: 'none' }} 
                               />
                            </label>
@@ -1518,7 +1722,7 @@ export default function Dashboard() {
                      <button 
                         type="submit" 
                         className="action-button" 
-                        disabled={uploading || addingUrl || (importType === 'pdf' && !selectedFile) || (importType === 'image' && !selectedFile) || (importType === 'url' && !urlInput.trim()) || (importType === 'text' && !markdownInput.trim())}
+                        disabled={uploading || addingUrl || (importType === 'pdf' && selectedFiles.length === 0) || (importType === 'image' && selectedFiles.length === 0) || (importType === 'url' && !urlInput.trim()) || (importType === 'text' && !markdownInput.trim())}
                         style={{ height: '48px', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                      >
                         {(uploading || addingUrl) ? (
@@ -1794,6 +1998,88 @@ export default function Dashboard() {
                       >
                          Supprimer
                       </button>
+                   </div>
+                </div>
+             </div>
+          )}
+
+          {showCategoryModal && (
+             <div 
+                style={{
+                   position: 'fixed',
+                   top: 0,
+                   left: 0,
+                   right: 0,
+                   bottom: 0,
+                   backgroundColor: 'rgba(9, 13, 22, 0.85)',
+                   backdropFilter: 'blur(12px)',
+                   display: 'flex',
+                   alignItems: 'center',
+                   justifyContent: 'center',
+                   zIndex: 1000,
+                   padding: '20px',
+                   boxSizing: 'border-box'
+                }}
+                onClick={(e) => {
+                   if (e.target === e.currentTarget) {
+                      setShowCategoryModal(false);
+                   }
+                }}
+             >
+                <div 
+                   style={{
+                      backgroundColor: '#131924',
+                      padding: '24px',
+                      borderRadius: '24px',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      maxWidth: '500px',
+                      width: '100%',
+                      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '18px',
+                      maxHeight: '80vh'
+                   }}
+                >
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                         <span style={{ fontSize: '20px' }}>📁</span>
+                         <h3 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>Filtrer par catégorie</h3>
+                      </div>
+                      <button 
+                         onClick={() => setShowCategoryModal(false)}
+                         style={{ background: 'none', border: 'none', color: '#fff', fontSize: '18px', cursor: 'pointer', opacity: 0.6 }}
+                      >
+                         ✕
+                      </button>
+                   </div>
+
+                   <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
+                      {['all', ...Array.from(new Set(documents.map(d => d.category).filter(Boolean))).filter(cat => {
+                         const lastSegment = cat.split('/').pop();
+                         const isWebsiteSubfolder = documents.some(doc => doc.type === 'website' && doc.id === lastSegment);
+                         return !isWebsiteSubfolder;
+                      })].map(cat => (
+                         <button 
+                            key={cat}
+                            onClick={() => {
+                               setCategoryFilter(cat);
+                               setShowCategoryModal(false);
+                            }}
+                            className={`action-button ${categoryFilter === cat ? 'btn-optimal' : 'btn-secondary'}`}
+                            style={{ 
+                               justifyContent: 'flex-start', 
+                               height: '42px', 
+                               fontSize: '14px', 
+                               padding: '0 16px',
+                               backgroundColor: categoryFilter === cat ? 'var(--color-vivid-green)' : 'rgba(255,255,255,0.02)',
+                               color: categoryFilter === cat ? '#000' : '#fff',
+                               border: '1px solid rgba(255,255,255,0.05)'
+                            }}
+                         >
+                            {cat === 'all' ? '📁 Toutes les catégories' : `📁 ${cat}`}
+                         </button>
+                      ))}
                    </div>
                 </div>
              </div>

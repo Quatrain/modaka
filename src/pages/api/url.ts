@@ -3,11 +3,47 @@ import { QueueManager } from '../../lib/queue';
 
 export const prerender = false;
 
+function isAssetUrl(urlStr: string): boolean {
+   try {
+      const url = new URL(urlStr);
+      const lowerPath = url.pathname.toLowerCase().replace(/\/$/, '');
+      return (
+         lowerPath.endsWith('.css') ||
+         lowerPath.endsWith('.js') ||
+         lowerPath.endsWith('.png') ||
+         lowerPath.endsWith('.jpg') ||
+         lowerPath.endsWith('.jpeg') ||
+         lowerPath.endsWith('.gif') ||
+         lowerPath.endsWith('.svg') ||
+         lowerPath.endsWith('.ico') ||
+         lowerPath.endsWith('.woff') ||
+         lowerPath.endsWith('.woff2') ||
+         lowerPath.endsWith('.ttf') ||
+         lowerPath.endsWith('.mp4') ||
+         lowerPath.endsWith('.mp3') ||
+         lowerPath.endsWith('.zip') ||
+         lowerPath.endsWith('.pdf') ||
+         lowerPath.endsWith('.json') ||
+         lowerPath.endsWith('.xml') ||
+         lowerPath.includes('favicon')
+      );
+   } catch {
+      return true; // invalid URL
+   }
+}
+
 export const POST: APIRoute = async ({ request }) => {
    try {
       const { url, category, contextNote, crawlDepth } = await request.json();
       if (!url) {
          return new Response(JSON.stringify({ error: 'Aucune URL fournie' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+         });
+      }
+
+      if (isAssetUrl(url)) {
+         return new Response(JSON.stringify({ error: "L'URL fournie pointe vers une image, une icône ou un fichier statique non-indexable" }), {
             status: 400,
             headers: { 'Content-Type': 'application/json' }
          });

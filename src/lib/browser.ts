@@ -3,6 +3,33 @@ import { Log } from '@quatrain/log';
 import * as fs from 'node:fs/promises';
 
 export async function fetchHtmlWithJs(url: string): Promise<string> {
+   // 1. Fast HTTP fetch check for HTML pages
+   try {
+      Log.info(`[Browser Scraper] Trying fast HTTP fetch for: ${url}`);
+      const res = await fetch(url, {
+         headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+         },
+         signal: AbortSignal.timeout(5000)
+      });
+      if (res.ok) {
+         const contentType = res.headers.get('content-type') || '';
+         if (contentType.includes('text/html')) {
+            const html = await res.text();
+            if (html.length > 200 && html.includes('<body')) {
+               Log.info(`[Browser Scraper] Fast fetch successful for ${url} (${html.length} bytes)`);
+               return html;
+            }
+         } else {
+            Log.warn(`[Browser Scraper] Fast fetch returned non-HTML type: ${contentType}`);
+         }
+      } else {
+         Log.warn(`[Browser Scraper] Fast fetch returned status: ${res.status}`);
+      }
+   } catch (e: any) {
+      Log.warn(`[Browser Scraper] Fast fetch failed: ${e.message}. Falling back to Puppeteer.`);
+   }
+
    let executablePath = process.env.CHROME_PATH || '';
 
    if (!executablePath) {
@@ -47,8 +74,8 @@ export async function fetchHtmlWithJs(url: string): Promise<string> {
 
       Log.info(`[Browser Scraper] Navigating to ${url}...`);
       await page.goto(url, {
-         waitUntil: ['domcontentloaded', 'networkidle2'],
-         timeout: 30000
+         waitUntil: 'domcontentloaded',
+         timeout: 15000
       });
 
       const html = await page.content();

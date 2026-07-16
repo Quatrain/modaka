@@ -76,6 +76,30 @@ function extractLinks(html: string, baseUrl: string): string[] {
             resolved.hostname === baseObj.hostname &&
             resolved.pathname !== baseObj.pathname
          ) {
+             const lowerPath = resolved.pathname.toLowerCase().replace(/\/$/, '');
+             if (
+                lowerPath.endsWith('.css') ||
+                lowerPath.endsWith('.js') ||
+                lowerPath.endsWith('.png') ||
+                lowerPath.endsWith('.jpg') ||
+                lowerPath.endsWith('.jpeg') ||
+                lowerPath.endsWith('.gif') ||
+                lowerPath.endsWith('.svg') ||
+                lowerPath.endsWith('.ico') ||
+                lowerPath.endsWith('.woff') ||
+                lowerPath.endsWith('.woff2') ||
+                lowerPath.endsWith('.ttf') ||
+                lowerPath.endsWith('.mp4') ||
+                lowerPath.endsWith('.mp3') ||
+                lowerPath.endsWith('.zip') ||
+                lowerPath.endsWith('.pdf') ||
+                lowerPath.endsWith('.json') ||
+                lowerPath.endsWith('.xml') ||
+                lowerPath.includes('favicon')
+             ) {
+                continue;
+             }
+
             const cleanUrl = resolved.origin + resolved.pathname.replace(/\/$/, '') + resolved.search;
             if (!links.includes(cleanUrl)) {
                links.push(cleanUrl);
@@ -164,6 +188,7 @@ class QueueManagerClass {
       let rawText = '';
       let isImage = false;
       let isText = false;
+      let isScannedPdf = false;
       let mediaPart: any = null;
       let buffer: Buffer | null = null;
 
@@ -182,7 +207,7 @@ class QueueManagerClass {
       };
 
       const getDocFile = (ref: string, mime: string) => ({
-         bucket: 'documents',
+         bucket: process.env.S3_BUCKET || 'documents',
          ref,
          name: path.basename(ref),
          mime
@@ -249,8 +274,8 @@ ${rawText}
             : (parentResult.category || 'inbox');
 
          const parentSemanticId = slugify(parentResult.title || 'webpage') || crypto.randomUUID();
-         const fileUid = crypto.randomUUID();
-         const parentMdRef = `markdowns/${fileUid}-${parentSemanticId}.md`;
+         const urlFileUid = crypto.randomUUID();
+         const parentMdRef = `markdowns/${urlFileUid}-${parentSemanticId}.md`;
 
          // Save initial parent document
          await docStorage.create(getDocFile(parentMdRef, 'text/markdown') as any, Readable.from([parentResult.markdown]));
@@ -444,7 +469,6 @@ ${childRawText}
             parentItem.set('body', updatedBody);
             await parentItem.save();
          }
-
          task.progress = 100;
          return;
       }
@@ -467,11 +491,26 @@ ${childRawText}
                }
             };
          } else {
+            let pdfText = '';
             try {
                const pdfData = await pdf(buffer);
-               rawText = pdfData.text;
+               pdfText = pdfData.text || '';
             } catch (err: any) {
-               throw new Error(`Erreur d'analyse PDF : ${err.message}`);
+               Log.warn(`[Queue] Failed to parse PDF with pdf-parse: ${err.message}`);
+            }
+
+            if (pdfText.trim().length < 150) {
+               Log.info(`[Queue] PDF "${task.name}" has too little text layer (${pdfText.trim().length} chars). Using direct Gemini multimodal PDF ingestion/OCR.`);
+               isScannedPdf = true;
+               const base64Data = buffer.toString('base64');
+               mediaPart = {
+                  inlineData: {
+                     mimeType: 'application/pdf',
+                     data: base64Data
+                  }
+               };
+            } else {
+               rawText = pdfText;
             }
          }
       }
@@ -495,6 +534,23 @@ ${task.contextNote ? `Crucial User Context Note:\n- ${task.contextNote}\n` : ''}
 
          result = await gemini.generateStructured([
             { text: imagePrompt },
+            mediaPart
+         ], schema, { model });
+      } else if (isScannedPdf) {
+         const pdfPrompt = `You are a professional documentation assistant. Below is an uploaded scanned or image-only PDF document. Your task is to perform OCR on its pages, extract its metadata, and transcribe its content.
+
+Instructions for fields:
+- "title": Clean, concise title of the document.
+- "type": Type of concept/document (e.g., diploma, certificate, resume, contract, guide, etc.).
+- "summary": A concise 2-3 sentence semantic summary of the document.
+- "category": Suggested folder path (e.g., career/diplomas, career/resume).
+- "tags": Relevant lowercase tags.
+- "markdown": You MUST generate a complete, high-fidelity, and verbatim transcription of the main content of the PDF pages in Markdown. Do NOT summarize the content, do NOT skip sections, signatures, logos, or official stamps. Preserve all text detail and dates exactly as they appear in the original document.
+
+${task.contextNote ? `Crucial User Context Note:\n- ${task.contextNote}\n` : ''}`;
+
+         result = await gemini.generateStructured([
+            { text: pdfPrompt },
             mediaPart
          ], schema, { model });
       } else {

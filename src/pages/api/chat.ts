@@ -69,7 +69,7 @@ export const POST: APIRoute = async ({ request }) => {
                try {
                   const docStorage = Storage.getStorage('document-storage');
                   const getDocFile = (ref: string) => ({
-                     bucket: 'documents',
+                     bucket: process.env.S3_BUCKET || 'documents',
                      ref,
                      name: path.basename(ref)
                   });
