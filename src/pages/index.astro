@@ -1,6 +1,9 @@
 ---
 import Dashboard from '../components/Dashboard';
 import '../styles/global.css';
+
+const devModeCookie = Astro.cookies.get('sb_dev_mode');
+const initialDevMode = devModeCookie ? devModeCookie.value === 'true' : false;
 ---
 
 <html lang="fr">
@@ -17,7 +20,7 @@ import '../styles/global.css';
     <meta name="description" content="Personal mobile-first knowledge base with Astro and Gemini" />
   </head>
   <body>
-    <Dashboard client:load />
+    <Dashboard client:load initialDevMode={initialDevMode} />
 
     <script is:inline>
       if ('serviceWorker' in navigator) {

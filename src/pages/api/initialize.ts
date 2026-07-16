@@ -90,7 +90,7 @@ export const POST: APIRoute = async ({ request }) => {
          const mdRef = `markdowns/${semanticId}.md`;
 
          const getDocFile = (ref: string) => ({
-            bucket: 'documents',
+            bucket: process.env.S3_BUCKET || 'documents',
             ref,
             name: path.basename(ref),
             mime: 'text/markdown'

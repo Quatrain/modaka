@@ -6,43 +6,66 @@ import { QueueManager } from '../../lib/queue';
 
 export const prerender = false;
 
+function decodeFilename(filename: string): string {
+   // If the string contains characters > 255, it's already Unicode, do not decode it.
+   for (let i = 0; i < filename.length; i++) {
+      if (filename.charCodeAt(i) > 255) {
+         return filename;
+      }
+   }
+   try {
+      const buffer = Buffer.from(filename, 'binary');
+      const decoded = buffer.toString('utf8');
+      if (decoded !== filename && !decoded.includes('\uFFFD')) {
+         return decoded;
+      }
+   } catch (e) {
+      // Fallback
+   }
+   return filename;
+}
+
 export const POST: APIRoute = async ({ request }) => {
    try {
       const formData = await request.formData();
-      const file = formData.get('file') as File | null;
+      const files = (formData.getAll('file') as File[]).filter(f => f.name && f.size > 0);
       const textContent = (formData.get('textContent') as string) || '';
       const contextNote = (formData.get('contextNote') as string) || '';
       const formCategory = (formData.get('category') as string) || 'inbox';
 
-      if (!file && !textContent.trim()) {
+      if (files.length === 0 && !textContent.trim()) {
          return new Response(JSON.stringify({ error: 'Aucun fichier ni texte fourni' }), {
             status: 400,
             headers: { 'Content-Type': 'application/json' }
          });
       }
 
-      let taskId = '';
-      if (file) {
-         // Save the uploaded file to a temporary location
+      const taskIds: string[] = [];
+      if (files.length > 0) {
          const tempDir = path.resolve(process.cwd(), 'tmp');
          await fs.mkdir(tempDir, { recursive: true });
 
-         const arrayBuffer = await file.arrayBuffer();
-         const buffer = Buffer.from(arrayBuffer);
-         const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(file.name);
+         for (const file of files) {
+            const arrayBuffer = await file.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
 
-         const tempFilePath = path.join(tempDir, `${crypto.randomUUID()}-${file.name}`);
-         await fs.writeFile(tempFilePath, buffer);
+            // Fix accents in filename if parsed as Latin-1
+            const cleanFileName = decodeFilename(file.name);
+            const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(cleanFileName);
 
-         // Add document processing task to background queue
-         const task = await QueueManager.addTask({
-            type: isImage ? 'image' : 'pdf',
-            name: file.name,
-            tempFilePath,
-            category: formCategory,
-            contextNote
-         });
-         taskId = task.id;
+            const tempFilePath = path.join(tempDir, `${crypto.randomUUID()}-${cleanFileName}`);
+            await fs.writeFile(tempFilePath, buffer);
+
+            // Add document processing task to background queue
+            const task = await QueueManager.addTask({
+               type: isImage ? 'image' : 'pdf',
+               name: cleanFileName,
+               tempFilePath,
+               category: formCategory,
+               contextNote
+            });
+            taskIds.push(task.id);
+         }
       } else {
          // Add text/markdown processing task to background queue
          const task = await QueueManager.addTask({
@@ -52,13 +75,13 @@ export const POST: APIRoute = async ({ request }) => {
             category: formCategory,
             contextNote
          });
-         taskId = task.id;
+         taskIds.push(task.id);
       }
 
       return new Response(JSON.stringify({ 
          success: true, 
          queued: true,
-         taskId
+         taskIds
       }), {
          status: 202,
          headers: { 'Content-Type': 'application/json' }
