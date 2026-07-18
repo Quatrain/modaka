@@ -1,0 +1,10 @@
+{
+  "name": "second-brain",
+  "version": "1.0.0",
+  "description": "Tactile and touch-first PWA personal knowledge base with Astro and Gemini.",
+  "requiredEnv": [
+    "SECONDBRAIN_SUBDOMAIN",
+    "GEMINI_API_KEY"
+  ],
+  "license": "AGPL-3.0-only"
+}

@@ -1,0 +1,6 @@
+{
+  "name": "second-brain",
+  "description": "Tactile and touch-first PWA personal knowledge base with Astro and Gemini.",
+  "author": "crapougnax",
+  "version": "1.0.0"
+}

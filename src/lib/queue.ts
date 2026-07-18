@@ -31,7 +31,7 @@ async function gitAddIfRepo(filePath: string) {
 export interface Task {
    id: string;
    status: 'pending' | 'processing' | 'completed' | 'failed';
-   type: 'pdf' | 'image' | 'url' | 'text';
+   type: 'pdf' | 'image' | 'url' | 'text' | 'audio';
    name: string;
    progress: number;
    error?: string;
@@ -44,6 +44,10 @@ export interface Task {
    category: string;
    contextNote?: string;
    crawlDepth?: number;
+   recordedLive?: boolean;
+   hasTempFile?: boolean;
+   latitude?: number;
+   longitude?: number;
 }
 
 function normalizeUrl(urlStr: string): string {
@@ -116,8 +120,21 @@ class QueueManagerClass {
    private tasks: Map<string, Task> = new Map();
    private isProcessing = false;
 
-   public getTasks(): Task[] {
-      return Array.from(this.tasks.values()).sort(
+   public async getTasks(): Promise<Task[]> {
+      const taskList = Array.from(this.tasks.values());
+      const tasksWithExistence = await Promise.all(taskList.map(async task => {
+         let hasTempFile = false;
+         if (task.tempFilePath) {
+            try {
+               await fs.access(task.tempFilePath);
+               hasTempFile = true;
+            } catch {
+               hasTempFile = false;
+            }
+         }
+         return { ...task, hasTempFile };
+      }));
+      return tasksWithExistence.sort(
          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
    }
@@ -139,8 +156,61 @@ class QueueManagerClass {
       return newTask;
    }
 
+   public async retryTask(id: string): Promise<boolean> {
+      const task = this.tasks.get(id);
+      if (!task || task.status !== 'failed') return false;
+
+      if (task.tempFilePath) {
+         try {
+            await fs.access(task.tempFilePath);
+         } catch {
+            throw new Error("Le fichier temporaire d'origine a été supprimé ou est expiré. Veuillez réenregistrer.");
+         }
+      }
+
+      task.status = 'pending';
+      task.progress = 0;
+      delete task.error;
+      this.triggerProcessing();
+      return true;
+   }
+
+   public deleteTask(id: string): boolean {
+      const task = this.tasks.get(id);
+      if (!task) return false;
+      if (task.status === 'processing') return false;
+
+      if (task.tempFilePath) {
+         fs.unlink(task.tempFilePath).catch(() => {});
+      }
+      this.tasks.delete(id);
+      return true;
+   }
+
+   private async cleanupOldTempFiles() {
+      try {
+         const tempDir = path.resolve(process.cwd(), 'tmp');
+         const files = await fs.readdir(tempDir);
+         const now = Date.now();
+         const ONE_DAY = 24 * 60 * 60 * 1000;
+         
+         for (const file of files) {
+            if (file === 'chrome-profile') continue;
+            const filePath = path.join(tempDir, file);
+            const stat = await fs.stat(filePath);
+            if (stat.isFile() && (now - stat.mtimeMs > ONE_DAY)) {
+               await fs.unlink(filePath);
+               Log.info(`[Queue Cleanup] Deleted old temporary file: ${filePath}`);
+            }
+         }
+      } catch (e: any) {
+         Log.warn(`[Queue Cleanup] Failed to clean old temp files: ${e.message}`);
+      }
+   }
+
    private triggerProcessing() {
       if (this.isProcessing) return;
+      this.cleanupOldTempFiles(); // clean async
       this.processNext();
    }
 
@@ -168,7 +238,7 @@ class QueueManagerClass {
          Log.error(`[Queue] Failed task ${pendingTask.id}: ${pendingTask.error}`, err);
       } finally {
          pendingTask.completedAt = new Date().toISOString();
-         if (pendingTask.tempFilePath) {
+         if (pendingTask.status === 'completed' && pendingTask.tempFilePath) {
             try {
                await fs.unlink(pendingTask.tempFilePath);
             } catch (e) {
@@ -184,6 +254,31 @@ class QueueManagerClass {
 
       const gitLocalPath = process.env.GIT_LOCAL_PATH || path.resolve(process.cwd(), '.second-brain-git');
       const documentStoragePath = process.env.DOCUMENT_STORAGE_PATH || path.resolve(process.cwd(), '.second-brain-docs');
+
+      // Resolve Location Context via Reverse Geocoding if coordinates are provided
+      let locationContext = '';
+      if (task.latitude !== undefined && task.longitude !== undefined) {
+         try {
+            Log.info(`[Queue Geocoding] Fetching location for coords: ${task.latitude}, ${task.longitude}`);
+            const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${task.latitude}&lon=${task.longitude}&zoom=10`;
+            const response = await fetch(url, {
+               headers: {
+                  'User-Agent': 'SecondBrainNoteTaker/1.0 (contact: brad@quatrain.com)'
+               }
+            });
+            if (response.ok) {
+               const data = await response.json();
+               if (data && data.address) {
+                  const city = data.address.city || data.address.town || data.address.village || data.address.municipality || data.address.county || '';
+                  const country = data.address.country || '';
+                  locationContext = [city, country].filter(Boolean).join(', ');
+                  Log.info(`[Queue Geocoding] Resolved location to: ${locationContext}`);
+               }
+            }
+         } catch (e: any) {
+            Log.warn(`[Queue Geocoding] Failed to reverse geocode: ${e.message}`);
+         }
+      }
 
       let rawText = '';
       let isImage = false;
@@ -224,9 +319,14 @@ class QueueManagerClass {
                type: 'ARRAY', 
                items: { type: 'STRING' } 
             },
-            markdown: { type: 'STRING' }
+            properNouns: {
+               type: 'ARRAY',
+               items: { type: 'STRING' }
+            },
+            markdown: { type: 'STRING' },
+            deductedDate: { type: 'STRING' }
          },
-         required: ['title', 'type', 'summary', 'category', 'tags', 'markdown']
+         required: ['title', 'type', 'summary', 'category', 'tags', 'properNouns', 'markdown']
       };
 
       const gemini = Ai.getAdapter();
@@ -257,7 +357,7 @@ class QueueManagerClass {
 2. Determine a friendly concept type for the document (e.g. "website", "specification", "guide", "article", "report", "manual", "note"). Use lowercase, singular. Since this is the main entry point page of a website, you MUST use the value "website" as the type.
 3. Draft a 2-3 sentence summary.
 4. Clean and format the raw text into clean, beautiful markdown. Preserve all headings, lists, tables, code blocks, and links while removing navigation menus, headers, footers, sidebars, and advertising blocks.
-5. Suggest a hierarchical category folder path (e.g. "technology/programming/javascript", "literature/science-fiction", "finance/investment", "personal/notes", "health/fitness") that best fits the document content. The category path should use lowercase letters, numbers, and slashes for segments (do not include trailing/leading slashes, and do not use "inbox" as the top level unless no other category is appropriate).
+5. Suggest a hierarchical category folder path containing at most 2 levels/segments (e.g. "technology/programming", "literature/fiction", "finance/investment", "personal/notes", "health/fitness") that best fits the document content. The category path should use lowercase letters, numbers, and slashes for segments (do not include trailing/leading slashes, and do not use "inbox" as the top level unless no other category is appropriate).
 6. Identify 3-5 relevant keyword tags.
 
 ${task.contextNote ? `Crucial User Context Note / Focus Instructions:\n- ${task.contextNote}\nUse this context to guide the title extraction, type determination, summary creation, tags selection, category suggestions, and clean markdown formatting.\n` : ''}
@@ -269,9 +369,15 @@ ${rawText}
 
          const parentResult = await gemini.generateStructured(parentPrompt, schema, { model });
          
-         const finalCategory = (task.category && task.category !== 'inbox' && task.category !== 'all') 
+         let finalCategory = (task.category && task.category !== 'inbox' && task.category !== 'all') 
             ? task.category 
             : (parentResult.category || 'inbox');
+
+         // Limit category depth to at most 2 levels (parent/child)
+         const catSegments = finalCategory.split('/').filter(Boolean);
+         if (catSegments.length > 2) {
+            finalCategory = catSegments.slice(0, 2).join('/');
+         }
 
          const parentSemanticId = slugify(parentResult.title || 'webpage') || crypto.randomUUID();
          const urlFileUid = crypto.randomUUID();
@@ -479,11 +585,22 @@ ${childRawText}
       } else if (task.tempFilePath) {
          buffer = await fs.readFile(task.tempFilePath);
          isImage = task.type === 'image';
+         const isAudio = task.type === 'audio';
 
          if (isImage) {
             const base64Data = buffer.toString('base64');
             const ext = path.extname(task.tempFilePath).toLowerCase();
             const mimeType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+            mediaPart = {
+               inlineData: {
+                  mimeType,
+                  data: base64Data
+               }
+            };
+         } else if (isAudio) {
+            const base64Data = buffer.toString('base64');
+            const ext = path.extname(task.tempFilePath).toLowerCase();
+            const mimeType = ext === '.wav' ? 'audio/wav' : ext === '.m4a' ? 'audio/x-m4a' : ext === '.ogg' ? 'audio/ogg' : ext === '.webm' ? 'audio/webm' : ext === '.caf' ? 'audio/caf' : 'audio/mpeg';
             mediaPart = {
                inlineData: {
                   mimeType,
@@ -526,14 +643,48 @@ Instructions for fields:
 - "title": Clean, concise title.
 - "type": Type of concept/document (e.g., screenshot, diagram, sketch, note).
 - "summary": A concise 2-3 sentence summary.
-- "category": Suggested folder path.
+- "category": Suggested folder path containing at most 2 levels (e.g., technology/ai, visual/diagrams).
 - "tags": Relevant tags.
+- "properNouns": List of proper nouns representing people, artists, bands, and collectives. Do NOT include institutions (such as publishing houses, corporations, museums, or universities) or locations/places (such as foundations, cities, or attractions) to prevent polluting the concepts directory.
 - "markdown": A detailed Markdown transcription or exhaustive description of the image content, including all text blocks, diagrams, annotations, and visual components.
 
 ${task.contextNote ? `Crucial User Context Note:\n- ${task.contextNote}\n` : ''}`;
 
          result = await gemini.generateStructured([
             { text: imagePrompt },
+            mediaPart
+         ], schema, { model });
+      } else if (task.type === 'audio') {
+         const audioPrompt = `You are a professional voice note assistant. Below is an uploaded audio recording (voice note). Your task is to:
+1. Generate a high-fidelity, verbatim transcription of everything said in the audio recording under the "markdown" field. Do NOT summarize or skip any words in the transcription. Use proper punctuation and paragraph breaks.
+2. Determine a clean, descriptive title for the note based on the content of the recording.
+3. Determine a friendly concept type for the document (e.g. "note", "meeting", "reminder", "thought", "journal"). Use lowercase, singular. Default to "note".
+4. Draft a 2-3 sentence summary of the recording.
+5. Identify 3-5 relevant keyword tags. Format tags as lowercase strings.
+6. Under "properNouns", specifically list all proper nouns of people, artists, bands, and collectives mentioned in the audio in their correct capitalization. Do NOT include institutions (such as publishing houses, corporations, museums, or universities) or locations/places (such as foundations, cities, or attractions) to prevent polluting the concepts directory.
+7. Determine the date and category of the document:
+   - Check if a specific date or relative time of event is clearly stated/spoken in the transcription text (e.g., "hier", "avant-hier", "lundi dernier", "aujourd'hui", "le 15 mars", "le 23 mai").
+   - If a date or relative date is mentioned, perform a calendar deduction relative to the System Date/Time context below. For example:
+     * If System Date is "2026-07-18" (which is a Saturday) and the audio says "hier", the deducted date is "2026-07-17".
+     * If System Date is "2026-07-18" (which is a Saturday) and the audio says "avant-hier", the deducted date is "2026-07-16".
+     * If System Date is "2026-07-18" (which is a Saturday) and the audio says "lundi" or "lundi dernier", the deducted date is "2026-07-13".
+     * Deduct the correct calendar date and write it in the "deductedDate" field in the format "YYYY-MM-DD".
+   - Suggest the category as "journal" (or "journal/personal", "journal/work") if the document is recorded live OR has a clearly stated/deducted date.
+   - If NO date or relative date is clearly mentioned/spoken, and the file was an uploaded audio file (Live Recording = No), the category MUST be "inbox" and NOT "journal", and "deductedDate" should be omitted or left blank.
+   - Under the "markdown" field, if a date or relative date was clearly mentioned, prefix the markdown content with a header showing the parsed/stated date (e.g., "**Date énoncée :** le 15 mars 2026 (Déduit : 2026-03-15)").
+8. Process Geolocation (Note-taking Location):
+   - If a note-taking location is provided (Context: Location of Note-Taking is not "Unknown") AND the voice note describes a recent event/thought (e.g., today, yesterday, a few days ago, or a recent trip/meeting/place visiting), you MUST:
+     * Add the city name (e.g., "Paris", "Marseille") to the "tags" array so the note is indexable by this place.
+     * Add a header line at the very top of the "markdown" field with the location (e.g. "**Lieu de prise de note :** Paris, France").
+
+Context:
+- Live Recording: ${task.recordedLive ? 'Yes' : 'No'}
+- Current Date/Time (System): ${new Date().toISOString()} (Day of week: ${new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date())})
+- Location of Note-Taking: ${locationContext || 'Unknown'}
+${task.contextNote ? `- User Context Note: ${task.contextNote}\n` : ''}`;
+
+         result = await gemini.generateStructured([
+            { text: audioPrompt },
             mediaPart
          ], schema, { model });
       } else if (isScannedPdf) {
@@ -543,8 +694,9 @@ Instructions for fields:
 - "title": Clean, concise title of the document.
 - "type": Type of concept/document (e.g., diploma, certificate, resume, contract, guide, etc.).
 - "summary": A concise 2-3 sentence semantic summary of the document.
-- "category": Suggested folder path (e.g., career/diplomas, career/resume).
+- "category": Suggested folder path containing at most 2 levels (e.g., career/diplomas, career/resume).
 - "tags": Relevant lowercase tags.
+- "properNouns": List of proper nouns representing people, artists, bands, and collectives. Do NOT include institutions (such as publishing houses, corporations, museums, or universities) or locations/places (such as foundations, cities, or attractions) to prevent polluting the concepts directory.
 - "markdown": You MUST generate a complete, high-fidelity, and verbatim transcription of the main content of the PDF pages in Markdown. Do NOT summarize the content, do NOT skip sections, signatures, logos, or official stamps. Preserve all text detail and dates exactly as they appear in the original document.
 
 ${task.contextNote ? `Crucial User Context Note:\n- ${task.contextNote}\n` : ''}`;
@@ -560,8 +712,9 @@ Instructions for fields:
 - "title": Clean, concise title of the document.
 - "type": Type of concept/document (e.g., resume, article, guide, recipe, etc.).
 - "summary": A concise 2-3 sentence semantic summary of the document.
-- "category": Suggested folder path (e.g., career/resume, culinary/recipes).
+- "category": Suggested folder path containing at most 2 levels (e.g., career/resume, culinary/recipes).
 - "tags": Relevant lowercase tags.
+- "properNouns": List of proper nouns representing people, artists, bands, and collectives. Do NOT include institutions (such as publishing houses, corporations, museums, or universities) or locations/places (such as foundations, cities, or attractions) to prevent polluting the concepts directory.
 - "markdown": You MUST generate a complete, high-fidelity, and verbatim transcription of the main content in Markdown. Do NOT summarize the content, do NOT skip sections, descriptions, bullet points, or contact info. Preserve all text detail, lists, and dates exactly as they appear in the original text, only cleaning up navigation or visual noise.
 
 ${task.contextNote ? `Crucial User Context Note:\n- ${task.contextNote}\n` : ''}
@@ -581,37 +734,108 @@ ${rawText}
       const mdRef = `markdowns/${fileUid}-${slugify(originalName)}.md`;
 
       if (task.tempFilePath && buffer) {
-         const rawRef = isImage ? `images/${fileUid}-${task.name}` : `pdfs/${fileUid}-${task.name}`;
-         await docStorage.create(getDocFile(rawRef, isImage ? 'image/jpeg' : 'application/pdf') as any, Readable.from([buffer]));
+         let rawRef = '';
+         let mimeType = 'application/octet-stream';
+         if (isImage) {
+            rawRef = `images/${fileUid}-${task.name}`;
+            mimeType = 'image/jpeg';
+         } else if (task.type === 'audio') {
+            rawRef = `audio/${fileUid}-${task.name}`;
+            const ext = path.extname(task.name).toLowerCase();
+            mimeType = ext === '.wav' ? 'audio/wav' : ext === '.m4a' ? 'audio/x-m4a' : ext === '.ogg' ? 'audio/ogg' : ext === '.webm' ? 'audio/webm' : ext === '.caf' ? 'audio/caf' : 'audio/mpeg';
+         } else {
+            rawRef = `pdfs/${fileUid}-${task.name}`;
+            mimeType = 'application/pdf';
+         }
+         await docStorage.create(getDocFile(rawRef, mimeType) as any, Readable.from([buffer]));
          await gitAddIfRepo(path.join(documentStoragePath, rawRef));
       }
 
       await docStorage.create(getDocFile(mdRef, 'text/markdown') as any, Readable.from([result.markdown]));
       await gitAddIfRepo(path.join(documentStoragePath, mdRef));
 
-      const finalCategory = (task.category && task.category !== 'inbox' && task.category !== 'all') 
+      let defaultCat = task.type === 'audio' ? (task.recordedLive ? 'journal' : 'inbox') : 'inbox';
+      let finalCategory = (task.category && task.category !== 'inbox' && task.category !== 'all') 
          ? task.category 
-         : (result.category || 'inbox');
+         : (result.category || defaultCat);
 
-      const semanticId = slugify(result.title || originalName) || crypto.randomUUID();
+      // Limit category depth to at most 2 levels (parent/child)
+      const catSegments = finalCategory.split('/').filter(Boolean);
+      if (catSegments.length > 2) {
+         finalCategory = catSegments.slice(0, 2).join('/');
+      }
+
+      // Check if an item with the same originalFileUri or source URL already exists
+      const query = ContentItem.query();
+      const existingItemsResult = await ContentItem.repository().query(query);
+      const existingItems = existingItemsResult.items || [];
+      
+      const sourceUrl = task.url;
+      const existing = existingItems.find(item => {
+         const fileUri = item.val('originalFileUri');
+         if (sourceUrl && fileUri === sourceUrl) {
+            return true;
+         }
+         if (task.tempFilePath && fileUri && fileUri.endsWith(task.name)) {
+            return true;
+         }
+         return false;
+      });
+
+      const semanticId = existing ? existing.val('id') : (slugify(result.title || originalName) || crypto.randomUUID());
+      
+      let itemCreatedAt = new Date().toISOString();
+      if (!existing && result.deductedDate) {
+         try {
+            const parsed = new Date(result.deductedDate);
+            if (!isNaN(parsed.getTime())) {
+               // Shift date to the deducted day, keeping the current time portion
+               const now = new Date();
+               parsed.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+               itemCreatedAt = parsed.toISOString();
+               Log.info(`[Queue] Deducted date found: ${result.deductedDate}. Setting createdAt to ${itemCreatedAt}`);
+            }
+         } catch (e: any) {
+            Log.warn(`[Queue] Failed to parse deductedDate "${result.deductedDate}": ${e.message}`);
+         }
+      } else if (existing) {
+         itemCreatedAt = existing.val('createdAt') || new Date().toISOString();
+      }
 
       task.progress = 85;
+
+      const mergedTags = Array.from(new Set([
+         ...(result.tags || []),
+         ...(result.properNouns || [])
+      ]));
 
       const contentItem = await ContentItem.factory({
          id: semanticId,
          title: result.title || task.name,
          type: result.type || 'note',
          category: finalCategory,
-         tags: result.tags || [],
+         tags: mergedTags,
          summary: result.summary,
-         originalFileUri: task.tempFilePath ? (isImage ? `images/${fileUid}-${task.name}` : `pdfs/${fileUid}-${task.name}`) : undefined,
+         originalFileUri: task.tempFilePath ? (isImage ? `images/${fileUid}-${task.name}` : task.type === 'audio' ? `audio/${fileUid}-${task.name}` : `pdfs/${fileUid}-${task.name}`) : undefined,
          markdownFileUri: mdRef,
          contextNote: task.contextNote || '',
          body: result.markdown,
-         createdAt: new Date().toISOString()
+         createdAt: itemCreatedAt,
+         latitude: task.latitude !== undefined ? task.latitude.toString() : undefined,
+         longitude: task.longitude !== undefined ? task.longitude.toString() : undefined
       });
 
       await contentItem.save();
+
+      if (result.properNouns && Array.isArray(result.properNouns)) {
+         const { searchAndCreateConcept } = await import('./concept-autolink');
+         for (const properNoun of result.properNouns) {
+            searchAndCreateConcept(properNoun).catch(e => {
+               Log.warn(`[Queue] Failed to autolink concept "${properNoun}": ${e.message}`);
+            });
+         }
+      }
+
       await gitAddIfRepo(path.join(gitLocalPath, 'content', finalCategory, `${semanticId}.md`));
    }
 }
@@ -619,6 +843,8 @@ ${rawText}
 const GLOBAL_QUEUE_KEY = Symbol.for('__second_brain_queue');
 if (!(globalThis as any)[GLOBAL_QUEUE_KEY]) {
    (globalThis as any)[GLOBAL_QUEUE_KEY] = new QueueManagerClass();
+} else {
+   Object.setPrototypeOf((globalThis as any)[GLOBAL_QUEUE_KEY], QueueManagerClass.prototype);
 }
 
 export const QueueManager = (globalThis as any)[GLOBAL_QUEUE_KEY] as QueueManagerClass;

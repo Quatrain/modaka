@@ -32,6 +32,12 @@ export const POST: APIRoute = async ({ request }) => {
       const textContent = (formData.get('textContent') as string) || '';
       const contextNote = (formData.get('contextNote') as string) || '';
       const formCategory = (formData.get('category') as string) || 'inbox';
+      const recordedLive = formData.get('recordedLive') === 'true';
+
+      const latitudeStr = formData.get('latitude') as string || '';
+      const longitudeStr = formData.get('longitude') as string || '';
+      const latitude = latitudeStr ? parseFloat(latitudeStr) : undefined;
+      const longitude = longitudeStr ? parseFloat(longitudeStr) : undefined;
 
       if (files.length === 0 && !textContent.trim()) {
          return new Response(JSON.stringify({ error: 'Aucun fichier ni texte fourni' }), {
@@ -52,17 +58,21 @@ export const POST: APIRoute = async ({ request }) => {
             // Fix accents in filename if parsed as Latin-1
             const cleanFileName = decodeFilename(file.name);
             const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(cleanFileName);
+            const isAudio = file.type.startsWith('audio/') || /\.(mp3|wav|m4a|ogg|webm|caf)$/i.test(cleanFileName);
 
             const tempFilePath = path.join(tempDir, `${crypto.randomUUID()}-${cleanFileName}`);
             await fs.writeFile(tempFilePath, buffer);
 
             // Add document processing task to background queue
             const task = await QueueManager.addTask({
-               type: isImage ? 'image' : 'pdf',
+               type: isImage ? 'image' : isAudio ? 'audio' : 'pdf',
                name: cleanFileName,
                tempFilePath,
                category: formCategory,
-               contextNote
+               contextNote,
+               recordedLive,
+               latitude,
+               longitude
             });
             taskIds.push(task.id);
          }
@@ -73,7 +83,9 @@ export const POST: APIRoute = async ({ request }) => {
             name: 'Texte collé',
             textContent: textContent.trim(),
             category: formCategory,
-            contextNote
+            contextNote,
+            latitude,
+            longitude
          });
          taskIds.push(task.id);
       }

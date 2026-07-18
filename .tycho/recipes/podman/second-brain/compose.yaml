@@ -1,0 +1,26 @@
+services:
+  second_brain:
+    image: docker.io/quatrain/second-brain:latest
+    restart: always
+    pull_policy: always
+    environment:
+      - PORT=4000
+      - HOST=0.0.0.0
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GIT_MODE=${GIT_MODE:-github}
+      - GIT_LOCAL_PATH=/data/second-brain/metadata
+      - GIT_REPO_OWNER=${GIT_REPO_OWNER:-}
+      - GIT_REPO_NAME=${GIT_REPO_NAME:-}
+      - GIT_BRANCH=${GIT_BRANCH:-main}
+      - GIT_GITHUB_TOKEN=${GIT_GITHUB_TOKEN:-}
+      - DOCUMENT_STORAGE_PATH=/data/second-brain/documents
+    volumes:
+      - /data/second-brain/metadata:/data/second-brain/metadata:Z
+      - /data/second-brain/documents:/data/second-brain/documents:Z
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.second-brain.rule=Host(`${SECONDBRAIN_SUBDOMAIN}.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.second-brain.entrypoints=websecure"
+      - "traefik.http.routers.second-brain.tls=true"
+      - "traefik.http.routers.second-brain.tls.certresolver=${TRAEFIK_RESOLVER:-myresolver}"
+      - "traefik.http.services.second-brain.loadbalancer.server.port=4000"
