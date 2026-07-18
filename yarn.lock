@@ -1738,9 +1738,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@quatrain/ai-gemini@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ai-gemini::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/ai-gemini@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ai-gemini::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/ai-gemini@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ai-gemini::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/ai-gemini@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ai-gemini::locator=%40quatrain%2Fmodaka%40workspace%3A."
   dependencies:
     "@google/genai": "npm:latest"
     "@quatrain/ai": "npm:^1.1.3"
@@ -1748,26 +1748,26 @@ __metadata:
   languageName: node
   linkType: soft
 
-"@quatrain/ai@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ai::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/ai@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ai::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/ai@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ai::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/ai@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ai::locator=%40quatrain%2Fmodaka%40workspace%3A."
   dependencies:
     "@quatrain/core": "npm:^1.2.16"
   languageName: node
   linkType: soft
 
-"@quatrain/api-server-astro@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api-server-astro::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/api-server-astro@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api-server-astro::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/api-server-astro@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api-server-astro::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/api-server-astro@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api-server-astro::locator=%40quatrain%2Fmodaka%40workspace%3A."
   dependencies:
     "@quatrain/api": "workspace:*"
     "@quatrain/api-server": "workspace:*"
   languageName: node
   linkType: soft
 
-"@quatrain/api-server@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api-server::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/api-server@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api-server::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/api-server@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api-server::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/api-server@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api-server::locator=%40quatrain%2Fmodaka%40workspace%3A."
   dependencies:
     "@quatrain/api": "workspace:*"
     "@quatrain/backend": "workspace:*"
@@ -1776,9 +1776,9 @@ __metadata:
   languageName: node
   linkType: soft
 
-"@quatrain/api@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/api@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/api@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/api@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api::locator=%40quatrain%2Fmodaka%40workspace%3A."
   dependencies:
     "@quatrain/core": "workspace:*"
     "@quatrain/http": "workspace:*"
@@ -1786,9 +1786,9 @@ __metadata:
   languageName: node
   linkType: soft
 
-"@quatrain/backend@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/backend::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/backend@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/backend::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/backend@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/backend::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/backend@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/backend::locator=%40quatrain%2Fmodaka%40workspace%3A."
   dependencies:
     "@faker-js/faker": "npm:^7.6.0"
     "@quatrain/core": "workspace:*"
@@ -1797,9 +1797,23 @@ __metadata:
   languageName: node
   linkType: soft
 
-"@quatrain/core@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/core::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/chat@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/chat::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/core@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/core::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/chat@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/chat::locator=%40quatrain%2Fmodaka%40workspace%3A."
+  dependencies:
+    "@quatrain/ai": "workspace:*"
+    "@quatrain/backend": "workspace:*"
+    "@quatrain/core": "workspace:*"
+    "@quatrain/log": "workspace:*"
+    "@quatrain/storage": "workspace:*"
+    "@quatrain/types": "workspace:*"
+    yaml: "npm:^2.4.0"
+  languageName: node
+  linkType: soft
+
+"@quatrain/core@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/core::locator=%40quatrain%2Fmodaka%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@quatrain/core@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/core::locator=%40quatrain%2Fmodaka%40workspace%3A."
   dependencies:
     "@quatrain/log": "workspace:*"
     "@quatrain/types": "workspace:*"
@@ -1808,9 +1822,9 @@ __metadata:
   languageName: node
   linkType: soft
 
-"@quatrain/http@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/http::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/http@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/http::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/http@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/http::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/http@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/http::locator=%40quatrain%2Fmodaka%40workspace%3A."
   languageName: node
   linkType: soft
 
@@ -1839,30 +1853,60 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@quatrain/log@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/log::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/ingestion-audio@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ingestion-audio::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/log@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/log::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/ingestion-audio@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ingestion-audio::locator=%40quatrain%2Fmodaka%40workspace%3A."
+  dependencies:
+    "@quatrain/ai": "workspace:*"
+    "@quatrain/core": "workspace:*"
+    "@quatrain/ingestion": "workspace:*"
+  languageName: node
+  linkType: soft
+
+"@quatrain/ingestion-ocr@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ingestion-ocr::locator=%40quatrain%2Fmodaka%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@quatrain/ingestion-ocr@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ingestion-ocr::locator=%40quatrain%2Fmodaka%40workspace%3A."
+  dependencies:
+    "@quatrain/ai": "workspace:*"
+    "@quatrain/core": "workspace:*"
+    "@quatrain/ingestion": "workspace:*"
+    pdf-parse: "npm:^1.1.1"
+  languageName: node
+  linkType: soft
+
+"@quatrain/ingestion-web@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ingestion-web::locator=%40quatrain%2Fmodaka%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@quatrain/ingestion-web@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ingestion-web::locator=%40quatrain%2Fmodaka%40workspace%3A."
+  dependencies:
+    "@quatrain/ai": "workspace:*"
+    "@quatrain/core": "workspace:*"
+    "@quatrain/ingestion": "workspace:*"
+  languageName: node
+  linkType: soft
+
+"@quatrain/ingestion@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ingestion::locator=%40quatrain%2Fmodaka%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@quatrain/ingestion@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ingestion::locator=%40quatrain%2Fmodaka%40workspace%3A."
+  dependencies:
+    "@quatrain/backend": "workspace:*"
+    "@quatrain/core": "workspace:*"
+    "@quatrain/log": "workspace:*"
+    "@quatrain/types": "workspace:*"
+  languageName: node
+  linkType: soft
+
+"@quatrain/log@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/log::locator=%40quatrain%2Fmodaka%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@quatrain/log@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/log::locator=%40quatrain%2Fmodaka%40workspace%3A."
   dependencies:
     chalk: "npm:^4.1.2"
     loglevel: "npm:^1.9.2"
   languageName: node
   linkType: soft
 
-"@quatrain/okf@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/okf::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/modaka@workspace:.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/okf@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/okf::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
-  dependencies:
-    "@quatrain/backend": "workspace:*"
-    "@quatrain/log": "workspace:*"
-    "@quatrain/storage": "workspace:*"
-    "@quatrain/types": "workspace:*"
-    yaml: "npm:^2.4.0"
-  languageName: node
-  linkType: soft
-
-"@quatrain/second-brain@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "@quatrain/second-brain@workspace:."
+  resolution: "@quatrain/modaka@workspace:."
   dependencies:
     "@astrojs/node": "npm:^9.0.0"
     "@astrojs/react": "npm:^4.2.0"
@@ -1873,7 +1917,12 @@ __metadata:
     "@quatrain/api-server": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api-server"
     "@quatrain/api-server-astro": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/api-server-astro"
     "@quatrain/backend": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/backend"
+    "@quatrain/chat": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/chat"
     "@quatrain/core": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/core"
+    "@quatrain/ingestion": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ingestion"
+    "@quatrain/ingestion-audio": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ingestion-audio"
+    "@quatrain/ingestion-ocr": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ingestion-ocr"
+    "@quatrain/ingestion-web": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/ingestion-web"
     "@quatrain/log": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/log"
     "@quatrain/okf": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/okf"
     "@quatrain/storage": "portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage"
@@ -1904,9 +1953,21 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@quatrain/storage-git@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage-git::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/okf@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/okf::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/storage-git@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage-git::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/okf@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/okf::locator=%40quatrain%2Fmodaka%40workspace%3A."
+  dependencies:
+    "@quatrain/backend": "workspace:*"
+    "@quatrain/log": "workspace:*"
+    "@quatrain/storage": "workspace:*"
+    "@quatrain/types": "workspace:*"
+    yaml: "npm:^2.4.0"
+  languageName: node
+  linkType: soft
+
+"@quatrain/storage-git@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage-git::locator=%40quatrain%2Fmodaka%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@quatrain/storage-git@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage-git::locator=%40quatrain%2Fmodaka%40workspace%3A."
   dependencies:
     "@octokit/rest": "npm:^20.1.1"
     "@quatrain/log": "workspace:*"
@@ -1914,18 +1975,18 @@ __metadata:
   languageName: node
   linkType: soft
 
-"@quatrain/storage-local@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage-local::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/storage-local@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage-local::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/storage-local@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage-local::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/storage-local@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage-local::locator=%40quatrain%2Fmodaka%40workspace%3A."
   dependencies:
     "@quatrain/storage": "workspace:*"
     fs-extra: "npm:^11.2.0"
   languageName: node
   linkType: soft
 
-"@quatrain/storage-s3@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage-s3::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/storage-s3@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage-s3::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/storage-s3@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage-s3::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/storage-s3@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage-s3::locator=%40quatrain%2Fmodaka%40workspace%3A."
   dependencies:
     "@aws-sdk/client-s3": "npm:^3.337.0"
     "@aws-sdk/s3-request-presigner": "npm:^3.342.0"
@@ -1934,9 +1995,9 @@ __metadata:
   languageName: node
   linkType: soft
 
-"@quatrain/storage@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/storage@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/storage@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/storage@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/storage::locator=%40quatrain%2Fmodaka%40workspace%3A."
   dependencies:
     "@quatrain/core": "npm:^1.2.16"
     fs-extra: "npm:^11.2.0"
@@ -1945,15 +2006,15 @@ __metadata:
   languageName: node
   linkType: soft
 
-"@quatrain/types@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/types::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/types@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/types::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/types@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/types::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/types@portal:/Users/crapougnax/CODE/QUATRAIN/Core/packages/types::locator=%40quatrain%2Fmodaka%40workspace%3A."
   languageName: node
   linkType: soft
 
-"@quatrain/ux-form-react@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-form-react::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/ux-form-react@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-form-react::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/ux-form-react@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-form-react::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/ux-form-react@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-form-react::locator=%40quatrain%2Fmodaka%40workspace%3A."
   dependencies:
     "@mantine/core": "npm:^7.11.1"
     "@mantine/hooks": "npm:^7.11.1"
@@ -1966,9 +2027,9 @@ __metadata:
   languageName: node
   linkType: soft
 
-"@quatrain/ux-list-react@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-list-react::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/ux-list-react@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-list-react::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/ux-list-react@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-list-react::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/ux-list-react@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-list-react::locator=%40quatrain%2Fmodaka%40workspace%3A."
   dependencies:
     "@mantine/core": "npm:^7.11.1"
     "@mantine/hooks": "npm:^7.11.1"
@@ -1983,24 +2044,24 @@ __metadata:
   languageName: node
   linkType: soft
 
-"@quatrain/ux-list@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-list::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/ux-list@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-list::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/ux-list@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-list::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/ux-list@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-list::locator=%40quatrain%2Fmodaka%40workspace%3A."
   languageName: node
   linkType: soft
 
-"@quatrain/ux-react@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-react::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/ux-react@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-react::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/ux-react@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-react::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/ux-react@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux-react::locator=%40quatrain%2Fmodaka%40workspace%3A."
   peerDependencies:
     react: ^18.0.0 || ^19.0.0
     react-dom: ^18.0.0 || ^19.0.0
   languageName: node
   linkType: soft
 
-"@quatrain/ux@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux::locator=%40quatrain%2Fsecond-brain%40workspace%3A.":
+"@quatrain/ux@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux::locator=%40quatrain%2Fmodaka%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@quatrain/ux@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux::locator=%40quatrain%2Fsecond-brain%40workspace%3A."
+  resolution: "@quatrain/ux@portal:/Users/crapougnax/CODE/QUATRAIN/CoreUX/packages/ux::locator=%40quatrain%2Fmodaka%40workspace%3A."
   dependencies:
     "@mantine/core": "npm:^7.15.0"
     "@mantine/hooks": "npm:^7.15.0"

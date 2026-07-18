@@ -1,12 +1,11 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
-import pdf from 'pdf-parse';
 import { Readable } from 'node:stream';
 import { Log } from '@quatrain/log';
 import { Storage } from '@quatrain/storage';
-import { Ai } from '@quatrain/ai';
 import { Backend } from '@quatrain/backend';
+import { Ingestion } from '@quatrain/ingestion';
 import { ContentItem } from './models/ContentItem';
 import { initBackend } from './backend';
 import { exec } from 'node:child_process';
@@ -283,8 +282,6 @@ class QueueManagerClass {
       let rawText = '';
       let isImage = false;
       let isText = false;
-      let isScannedPdf = false;
-      let mediaPart: any = null;
       let buffer: Buffer | null = null;
 
       task.progress = 20;
@@ -308,28 +305,6 @@ class QueueManagerClass {
          mime
       });
 
-      const schema = {
-         type: 'OBJECT',
-         properties: {
-            title: { type: 'STRING' },
-            type: { type: 'STRING' },
-            summary: { type: 'STRING' },
-            category: { type: 'STRING' },
-            tags: { 
-               type: 'ARRAY', 
-               items: { type: 'STRING' } 
-            },
-            properNouns: {
-               type: 'ARRAY',
-               items: { type: 'STRING' }
-            },
-            markdown: { type: 'STRING' },
-            deductedDate: { type: 'STRING' }
-         },
-         required: ['title', 'type', 'summary', 'category', 'tags', 'properNouns', 'markdown']
-      };
-
-      const gemini = Ai.getAdapter();
       const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
       const docStorage = Storage.getStorage('document-storage');
 
@@ -352,22 +327,11 @@ class QueueManagerClass {
          
          task.progress = 25;
 
-         const parentPrompt = `You are a professional documentation assistant. Below is the raw text of a web page. Your task is to:
-1. Extract a concise, accurate title for the document.
-2. Determine a friendly concept type for the document (e.g. "website", "specification", "guide", "article", "report", "manual", "note"). Use lowercase, singular. Since this is the main entry point page of a website, you MUST use the value "website" as the type.
-3. Draft a 2-3 sentence summary.
-4. Clean and format the raw text into clean, beautiful markdown. Preserve all headings, lists, tables, code blocks, and links while removing navigation menus, headers, footers, sidebars, and advertising blocks.
-5. Suggest a hierarchical category folder path containing at most 2 levels/segments (e.g. "technology/programming", "literature/fiction", "finance/investment", "personal/notes", "health/fitness") that best fits the document content. The category path should use lowercase letters, numbers, and slashes for segments (do not include trailing/leading slashes, and do not use "inbox" as the top level unless no other category is appropriate).
-6. Identify 3-5 relevant keyword tags.
-
-${task.contextNote ? `Crucial User Context Note / Focus Instructions:\n- ${task.contextNote}\nUse this context to guide the title extraction, type determination, summary creation, tags selection, category suggestions, and clean markdown formatting.\n` : ''}
-
-Raw HTML Text:
----
-${rawText}
----`;
-
-         const parentResult = await gemini.generateStructured(parentPrompt, schema, { model });
+         const webAdapter = Ingestion.getAdapter('web');
+         const parentResult = await webAdapter.process(rawText, {
+            contextNote: task.contextNote,
+            model
+         });
          
          let finalCategory = (task.category && task.category !== 'inbox' && task.category !== 'all') 
             ? task.category 
@@ -429,20 +393,10 @@ ${rawText}
                      .replace(/\s+/g, ' ')
                      .trim();
 
-                  const childPrompt = `You are a professional documentation assistant. Below is the raw text of a sub-page from a website. This sub-page is part of a larger parent document: "${parentResult.title}".
-Your task is to:
-1. Extract a concise, accurate title for this sub-page.
-2. Determine a friendly concept type for this sub-page (e.g. "page", "section", "article", "note"). Use lowercase, singular. Default to "page".
-3. Draft a 2-3 sentence summary.
-4. Clean and format the raw text into clean, beautiful markdown. Preserve all headings, lists, tables, code blocks, and links.
-5. Identify 3-5 relevant keyword tags.
-
-Raw Input Text:
----
-${childRawText}
----`;
-
-                  const childResult = await gemini.generateStructured(childPrompt, schema, { model });
+                  const childResult = await webAdapter.process(childRawText, {
+                     contextNote: `Ce document est une sous-page (Niveau 1) du document parent "${parentResult.title}".`,
+                     model
+                  });
                   const rawChildSemanticId = slugify(childResult.title || 'subpage') || crypto.randomUUID();
                   const childSemanticId = `${parentSemanticId}-${rawChildSemanticId}`;
                   const childFileUid = crypto.randomUUID();
@@ -509,20 +463,10 @@ ${childRawText}
                      .replace(/\s+/g, ' ')
                      .trim();
 
-                  const childPrompt = `You are a professional documentation assistant. Below is the raw text of a sub-page from a website. This sub-page is part of a larger parent document: "${parentResult.title}".
-Your task is to:
-1. Extract a concise, accurate title for this sub-page.
-2. Determine a friendly concept type for this sub-page (e.g. "specification", "guide", "article", "section", "note"). Use lowercase, singular.
-3. Draft a 2-3 sentence summary.
-4. Clean and format the raw text into clean, beautiful markdown. Preserve all headings, lists, tables, code blocks, and links.
-5. Identify 3-5 relevant keyword tags.
-
-Raw Input Text:
----
-${childRawText}
----`;
-
-                  const childResult = await gemini.generateStructured(childPrompt, schema, { model });
+                  const childResult = await webAdapter.process(childRawText, {
+                     contextNote: `Ce document est une sous-page (Niveau 2) du document parent "${parentResult.title}".`,
+                     model
+                  });
                   const rawChildSemanticId = slugify(childResult.title || 'subpage') || crypto.randomUUID();
                   const childSemanticId = `${parentSemanticId}-${rawChildSemanticId}`;
                   const childFileUid = crypto.randomUUID();
@@ -585,146 +529,52 @@ ${childRawText}
       } else if (task.tempFilePath) {
          buffer = await fs.readFile(task.tempFilePath);
          isImage = task.type === 'image';
-         const isAudio = task.type === 'audio';
-
-         if (isImage) {
-            const base64Data = buffer.toString('base64');
-            const ext = path.extname(task.tempFilePath).toLowerCase();
-            const mimeType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
-            mediaPart = {
-               inlineData: {
-                  mimeType,
-                  data: base64Data
-               }
-            };
-         } else if (isAudio) {
-            const base64Data = buffer.toString('base64');
-            const ext = path.extname(task.tempFilePath).toLowerCase();
-            const mimeType = ext === '.wav' ? 'audio/wav' : ext === '.m4a' ? 'audio/x-m4a' : ext === '.ogg' ? 'audio/ogg' : ext === '.webm' ? 'audio/webm' : ext === '.caf' ? 'audio/caf' : 'audio/mpeg';
-            mediaPart = {
-               inlineData: {
-                  mimeType,
-                  data: base64Data
-               }
-            };
-         } else {
-            let pdfText = '';
-            try {
-               const pdfData = await pdf(buffer);
-               pdfText = pdfData.text || '';
-            } catch (err: any) {
-               Log.warn(`[Queue] Failed to parse PDF with pdf-parse: ${err.message}`);
-            }
-
-            if (pdfText.trim().length < 150) {
-               Log.info(`[Queue] PDF "${task.name}" has too little text layer (${pdfText.trim().length} chars). Using direct Gemini multimodal PDF ingestion/OCR.`);
-               isScannedPdf = true;
-               const base64Data = buffer.toString('base64');
-               mediaPart = {
-                  inlineData: {
-                     mimeType: 'application/pdf',
-                     data: base64Data
-                  }
-               };
-            } else {
-               rawText = pdfText;
-            }
-         }
       }
 
       task.progress = 40;
 
       let result;
 
-      if (isImage) {
-         const imagePrompt = `You are a professional documentation assistant. Below is an uploaded image. Your task is to extract its metadata and transcribe/describe it.
+      if (task.type === 'audio') {
+         const audioAdapter = Ingestion.getAdapter('audio');
+         const ext = task.tempFilePath ? path.extname(task.tempFilePath).toLowerCase() : '.wav';
+         const mimeType = ext === '.wav' ? 'audio/wav' : ext === '.m4a' ? 'audio/x-m4a' : ext === '.ogg' ? 'audio/ogg' : ext === '.webm' ? 'audio/webm' : ext === '.caf' ? 'audio/caf' : 'audio/mpeg';
 
-Instructions for fields:
-- "title": Clean, concise title.
-- "type": Type of concept/document (e.g., screenshot, diagram, sketch, note).
-- "summary": A concise 2-3 sentence summary.
-- "category": Suggested folder path containing at most 2 levels (e.g., technology/ai, visual/diagrams).
-- "tags": Relevant tags.
-- "properNouns": List of proper nouns representing people, artists, bands, and collectives. Do NOT include institutions (such as publishing houses, corporations, museums, or universities) or locations/places (such as foundations, cities, or attractions) to prevent polluting the concepts directory.
-- "markdown": A detailed Markdown transcription or exhaustive description of the image content, including all text blocks, diagrams, annotations, and visual components.
-
-${task.contextNote ? `Crucial User Context Note:\n- ${task.contextNote}\n` : ''}`;
-
-         result = await gemini.generateStructured([
-            { text: imagePrompt },
-            mediaPart
-         ], schema, { model });
-      } else if (task.type === 'audio') {
-         const audioPrompt = `You are a professional voice note assistant. Below is an uploaded audio recording (voice note). Your task is to:
-1. Generate a high-fidelity, verbatim transcription of everything said in the audio recording under the "markdown" field. Do NOT summarize or skip any words in the transcription. Use proper punctuation and paragraph breaks.
-2. Determine a clean, descriptive title for the note based on the content of the recording.
-3. Determine a friendly concept type for the document (e.g. "note", "meeting", "reminder", "thought", "journal"). Use lowercase, singular. Default to "note".
-4. Draft a 2-3 sentence summary of the recording.
-5. Identify 3-5 relevant keyword tags. Format tags as lowercase strings.
-6. Under "properNouns", specifically list all proper nouns of people, artists, bands, and collectives mentioned in the audio in their correct capitalization. Do NOT include institutions (such as publishing houses, corporations, museums, or universities) or locations/places (such as foundations, cities, or attractions) to prevent polluting the concepts directory.
-7. Determine the date and category of the document:
-   - Check if a specific date or relative time of event is clearly stated/spoken in the transcription text (e.g., "hier", "avant-hier", "lundi dernier", "aujourd'hui", "le 15 mars", "le 23 mai").
-   - If a date or relative date is mentioned, perform a calendar deduction relative to the System Date/Time context below. For example:
-     * If System Date is "2026-07-18" (which is a Saturday) and the audio says "hier", the deducted date is "2026-07-17".
-     * If System Date is "2026-07-18" (which is a Saturday) and the audio says "avant-hier", the deducted date is "2026-07-16".
-     * If System Date is "2026-07-18" (which is a Saturday) and the audio says "lundi" or "lundi dernier", the deducted date is "2026-07-13".
-     * Deduct the correct calendar date and write it in the "deductedDate" field in the format "YYYY-MM-DD".
-   - Suggest the category as "journal" (or "journal/personal", "journal/work") if the document is recorded live OR has a clearly stated/deducted date.
-   - If NO date or relative date is clearly mentioned/spoken, and the file was an uploaded audio file (Live Recording = No), the category MUST be "inbox" and NOT "journal", and "deductedDate" should be omitted or left blank.
-   - Under the "markdown" field, if a date or relative date was clearly mentioned, prefix the markdown content with a header showing the parsed/stated date (e.g., "**Date énoncée :** le 15 mars 2026 (Déduit : 2026-03-15)").
-8. Process Geolocation (Note-taking Location):
-   - If a note-taking location is provided (Context: Location of Note-Taking is not "Unknown") AND the voice note describes a recent event/thought (e.g., today, yesterday, a few days ago, or a recent trip/meeting/place visiting), you MUST:
-     * Add the city name (e.g., "Paris", "Marseille") to the "tags" array so the note is indexable by this place.
-     * Add a header line at the very top of the "markdown" field with the location (e.g. "**Lieu de prise de note :** Paris, France").
-
-Context:
-- Live Recording: ${task.recordedLive ? 'Yes' : 'No'}
-- Current Date/Time (System): ${new Date().toISOString()} (Day of week: ${new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date())})
-- Location of Note-Taking: ${locationContext || 'Unknown'}
-${task.contextNote ? `- User Context Note: ${task.contextNote}\n` : ''}`;
-
-         result = await gemini.generateStructured([
-            { text: audioPrompt },
-            mediaPart
-         ], schema, { model });
-      } else if (isScannedPdf) {
-         const pdfPrompt = `You are a professional documentation assistant. Below is an uploaded scanned or image-only PDF document. Your task is to perform OCR on its pages, extract its metadata, and transcribe its content.
-
-Instructions for fields:
-- "title": Clean, concise title of the document.
-- "type": Type of concept/document (e.g., diploma, certificate, resume, contract, guide, etc.).
-- "summary": A concise 2-3 sentence semantic summary of the document.
-- "category": Suggested folder path containing at most 2 levels (e.g., career/diplomas, career/resume).
-- "tags": Relevant lowercase tags.
-- "properNouns": List of proper nouns representing people, artists, bands, and collectives. Do NOT include institutions (such as publishing houses, corporations, museums, or universities) or locations/places (such as foundations, cities, or attractions) to prevent polluting the concepts directory.
-- "markdown": You MUST generate a complete, high-fidelity, and verbatim transcription of the main content of the PDF pages in Markdown. Do NOT summarize the content, do NOT skip sections, signatures, logos, or official stamps. Preserve all text detail and dates exactly as they appear in the original document.
-
-${task.contextNote ? `Crucial User Context Note:\n- ${task.contextNote}\n` : ''}`;
-
-         result = await gemini.generateStructured([
-            { text: pdfPrompt },
-            mediaPart
-         ], schema, { model });
+         result = await audioAdapter.process(buffer!, {
+            mimeType,
+            recordedLive: task.recordedLive,
+            locationContext: locationContext || 'Unknown',
+            contextNote: task.contextNote,
+            model
+         });
       } else {
-         const textPrompt = `You are a professional documentation assistant. Below is a raw document text. Your task is to extract its metadata and structure it.
-
-Instructions for fields:
-- "title": Clean, concise title of the document.
-- "type": Type of concept/document (e.g., resume, article, guide, recipe, etc.).
-- "summary": A concise 2-3 sentence semantic summary of the document.
-- "category": Suggested folder path containing at most 2 levels (e.g., career/resume, culinary/recipes).
-- "tags": Relevant lowercase tags.
-- "properNouns": List of proper nouns representing people, artists, bands, and collectives. Do NOT include institutions (such as publishing houses, corporations, museums, or universities) or locations/places (such as foundations, cities, or attractions) to prevent polluting the concepts directory.
-- "markdown": You MUST generate a complete, high-fidelity, and verbatim transcription of the main content in Markdown. Do NOT summarize the content, do NOT skip sections, descriptions, bullet points, or contact info. Preserve all text detail, lists, and dates exactly as they appear in the original text, only cleaning up navigation or visual noise.
-
-${task.contextNote ? `Crucial User Context Note:\n- ${task.contextNote}\n` : ''}
-
-Raw Text:
----
-${rawText}
----`;
-
-         result = await gemini.generateStructured(textPrompt, schema, { model });
+         const ocrAdapter = Ingestion.getAdapter('ocr');
+         if (isImage) {
+            const ext = task.tempFilePath ? path.extname(task.tempFilePath).toLowerCase() : '.jpg';
+            const mimeType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+            result = await ocrAdapter.process(buffer!, {
+               isImage: true,
+               mimeType,
+               contextNote: task.contextNote,
+               model
+            });
+         } else {
+            // Either PDF or Text
+            const isPdf = task.type === 'pdf' || (task.tempFilePath && task.tempFilePath.endsWith('.pdf'));
+            if (isPdf && buffer) {
+               result = await ocrAdapter.process(buffer, {
+                  isImage: false,
+                  mimeType: 'application/pdf',
+                  contextNote: task.contextNote,
+                  model
+               });
+            } else {
+               result = await ocrAdapter.process(rawText, {
+                  contextNote: task.contextNote,
+                  model
+               });
+            }
+         }
       }
 
       task.progress = 70;
