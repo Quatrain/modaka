@@ -10,6 +10,10 @@ import { CrudEndpoint, ValuesEndpoint, ListEndpoint } from '@quatrain/api-server
 import { ContentItem } from './models/ContentItem';
 import { Ai } from '@quatrain/ai';
 import { GeminiAdapter } from '@quatrain/ai-gemini';
+import { Ingestion } from '@quatrain/ingestion';
+import { OcrIngestionAdapter } from '@quatrain/ingestion-ocr';
+import { AudioIngestionAdapter } from '@quatrain/ingestion-audio';
+import { WebIngestionAdapter } from '@quatrain/ingestion-web';
 import * as path from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -185,6 +189,11 @@ export function initBackend() {
    };
 
    astroAdapter.addEndpoint(ContentItemApi, '/api/content');
+
+   // 5. Initialize Ingestion Adapters
+   Ingestion.addAdapter(new OcrIngestionAdapter(), 'ocr');
+   Ingestion.addAdapter(new AudioIngestionAdapter(), 'audio');
+   Ingestion.addAdapter(new WebIngestionAdapter(), 'web');
 
    // Start background synchronization in local mode
    if (gitMode === 'local' && gitLocalPath) {
