@@ -4,16 +4,16 @@ Cette première étape vise à consolider la version mono-utilisateur de **Modak
 
 ---
 
-## 1. Découpage du Cœur : `modaka` & `@quatrain/okf`
+## 1. Découpage du Cœur : `@quatrain/chat` & `@quatrain/okf`
 
-Pour garantir la flexibilité du système, le cœur ne doit dépendre d'aucun serveur HTTP ni d'un système de fichiers rigide.
+Pour garantir la flexibilité du système, le cœur logique est divisé en packages monorepo indépendants de l'interface graphique :
 
 ```mermaid
 graph TD
-    UI[Interface Graphique] --> Core["modaka (Cœur de logique)"]
-    Core --> OKF["@quatrain/okf (Indexation & Parsing)"]
-    Core --> Ingest["@quatrain/ingestion (Agnostique)"]
-    Core --> Queue["@quatrain/queue (Abstraction)"]
+    UI[Interface Graphique] --> Chat["@quatrain/chat (Cœur de conversation)"]
+    Chat --> OKF["@quatrain/okf (Indexation & Parsing)"]
+    Chat --> Ingest["@quatrain/ingestion (Agnostique)"]
+    Chat --> Queue["@quatrain/queue (Abstraction)"]
 ```
 
 ### A. `@quatrain/okf` (Déjà existant dans le dépôt Core)
@@ -23,9 +23,12 @@ graph TD
   * Génération récursive des index de navigation (`index.md`).
   * Transformation bidirectionnelle (Markdown avec Frontmatter <-> Objet JS JSON).
 
-### B. `modaka` (Cœur du Compagnon)
-* **Rôle** : Logique métier non-graphique (moteur conversationnel, recherche hybride textuelle et sémantique, et cycle de vie des sessions).
-* **Environnement** : Compatible avec n'importe quel runtime JS (Node, Bun, ou dans le thread principal d'un moteur mobile).
+### B. `@quatrain/chat` (Nouveau package Core - Logique Pure / Headless)
+* **Rôle** : Logique métier non-graphique de discussion (moteur conversationnel, recherche hybride textuelle et sémantique, historique des messages, orchestration des invites/prompts et liaison avec les modèles de langage).
+* **Environnement** : Conçu pour tourner de manière agnostique sur n'importe quel runtime JS (Node, Bun, ou dans le thread principal d'un moteur mobile sous Expo).
+* **Découplage Vue/Logique (Core vs CoreUX)** :
+  * **Dans `@quatrain/chat` (Core)** : Uniquement le contrôleur logique et les machines d'états de conversation (`ChatController`, `MessageHistory`), sans aucune dépendance UI (pas de HTML, pas de React, pas de CSS).
+  * **Dans `CoreUX` (Interface Graphique)** : Tous les composants d'interface utilisateur en contact direct avec l'utilisateur (la bulle de discussion, le champ de saisie, le bouton du microphone, le lecteur vocal, et les dalles tactiles). Ces composants de `CoreUX` s'abonnent et interagissent avec les contrôleurs logiques de `@quatrain/chat`.
 
 ---
 
