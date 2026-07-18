@@ -10,8 +10,9 @@ Ce dossier regroupe les spécifications et notes de design de la plateforme **Mo
 * **Objectifs** : Découplage de la logique métier, gestion des pipelines d'ingestion agnostiques, et packaging mobile local.
 * **Composants** :
   * `@quatrain/okf` (Curation et validation OKF v0.1).
+  * `@quatrain/chat` (Gestion de la conversation et de l'historique sémantique).
   * `@quatrain/ingestion` (Adaptateurs d'OCR, d'Audio, de Vidéo et de Crawling Web).
-  * `modaka` (Cœur JS sans UI ni dépendance serveur HTTP).
+  * `modaka` (Application client/serveur ou statique).
   * `modaka-app` (Wrapper Expo pour exécution sur smartphone avec OCR et SLM locaux).
 
 ### 🥈 [Priorité 2 : SaaS Multi-Locataires & Ingestion Curation](./2_saas_and_curation.md)
