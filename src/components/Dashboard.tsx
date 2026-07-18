@@ -14,7 +14,9 @@ import {
    IconUser,
    IconVolume,
    IconVolumeOff,
-   IconTrash
+   IconTrash,
+   IconMicrophone,
+   IconPlayerStop
 } from '@tabler/icons-react';
 
 interface ContentItemData {
@@ -128,7 +130,17 @@ function formatRelativeDate(dateString?: string): string {
    }
 }
 
-export default function Dashboard({ initialDevMode = false }: { initialDevMode?: boolean }) {
+interface DashboardProps {
+   initialDevMode?: boolean;
+   defaultElevenLabsApiKey?: string;
+   defaultElevenLabsVoiceId?: string;
+}
+
+export default function Dashboard({ 
+   initialDevMode = false,
+   defaultElevenLabsApiKey = '',
+   defaultElevenLabsVoiceId = 'bVsJfghVbJypxgwVISO3'
+}: DashboardProps) {
    const [activeTab, setActiveTab] = useState<'chat' | 'docs' | 'stats'>('chat');
    const [documents, setDocuments] = useState<ContentItemData[]>([]);
    const [uploading, setUploading] = useState(false);
@@ -143,13 +155,14 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
    const [showRawViewer, setShowRawViewer] = useState<boolean>(false);
    const [docToDelete, setDocToDelete] = useState<ContentItemData | null>(null);
    const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
+   const [loading, setLoading] = useState(true);
    const [userProfile, setUserProfile] = useState({
       name: 'Olivier Lépine',
       email: 'olivier@lepine.fr',
       language: 'Français',
       ttsProvider: 'Browser',
-      elevenLabsApiKey: '',
-      elevenLabsVoiceId: 'bVsJfghVbJypxgwVISO3'
+      elevenLabsApiKey: defaultElevenLabsApiKey,
+      elevenLabsVoiceId: defaultElevenLabsVoiceId
    });
 
    useEffect(() => {
@@ -159,15 +172,22 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
             const parsed = JSON.parse(stored);
             setUserProfile(prev => ({
                ...prev,
-               ...parsed
+               ...parsed,
+               elevenLabsApiKey: parsed.elevenLabsApiKey || defaultElevenLabsApiKey,
+               elevenLabsVoiceId: parsed.elevenLabsVoiceId || defaultElevenLabsVoiceId
             }));
          } catch (e) {
             // ignore
          }
+      } else {
+         setUserProfile(prev => ({
+            ...prev,
+            elevenLabsApiKey: defaultElevenLabsApiKey,
+            elevenLabsVoiceId: defaultElevenLabsVoiceId
+         }));
       }
-   }, []);
+   }, [defaultElevenLabsApiKey, defaultElevenLabsVoiceId]);
 
-   // Sync devMode from cookie on load (client-side backup)
    useEffect(() => {
       const getCookie = (name: string) => {
          const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
@@ -181,12 +201,10 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
       }
    }, []);
 
-   // Sync state from URL hash
    useEffect(() => {
       const handleHashChange = () => {
          const hash = window.location.hash;
          if (!hash) {
-            // Default if no hash
             window.location.hash = '#/chat';
             return;
          }
@@ -220,7 +238,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
       };
    }, [documents]);
 
-   // Update hash when activeTab or selectedDoc changes
    useEffect(() => {
       if (activeTab === 'docs') {
          if (selectedDoc) {
@@ -305,7 +322,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
          }
          setSpeakingIndex(null);
       } else {
-         // Cancel any ongoing playbacks
          window.speechSynthesis.cancel();
          if (activeAudioRef.current) {
             activeAudioRef.current.pause();
@@ -362,7 +378,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
 
                await audio.play();
             } else {
-               // Browser SpeechSynthesis
                const cleanText = text.replace(/[#*`[\]()]/g, '');
                const utterance = new SpeechSynthesisUtterance(cleanText);
                utterance.lang = LANG_MAP[userProfile.language] || 'fr-FR';
@@ -398,27 +413,80 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
       return frontmatterLines.join('\n') + '\n' + (doc.body || '');
    };
 
-   // Import state
-   const [importType, setImportType] = useState<'pdf' | 'image' | 'url' | 'text'>('pdf');
-    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+   const [importType, setImportType] = useState<'pdf' | 'image' | 'url' | 'text' | 'audio'>('pdf');
+   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
    const [urlInput, setUrlInput] = useState('');
    const [markdownInput, setMarkdownInput] = useState('');
    const [contextNoteInput, setContextNoteInput] = useState('');
    const [addingUrl, setAddingUrl] = useState(false);
-
-   // Onboarding state
    const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
    const [expandedInterests, setExpandedInterests] = useState<string[]>([]);
    const [onboardingOptions, setOnboardingOptions] = useState<any[]>([]);
    const [initializing, setInitializing] = useState(false);
-
-   // Chat state
    const [messages, setMessages] = useState<Message[]>([
-      { role: 'assistant', content: 'Bonjour ! Je suis votre Second Brain Copilot. Vous pouvez uploader des PDFs dans l\'onglet "Documents" pour que je puisse les synthétiser et y accéder, ou simplement me poser des questions.' }
+      { role: 'assistant', content: 'Bonjour ! Je suis votre Copilot Modaka. Vous pouvez uploader des PDFs dans l\'onglet "Documents" pour que je puisse les synthétiser et y accéder, ou simplement me poser des questions.' }
    ]);
    const [inputMessage, setInputMessage] = useState('');
    const [sending, setSending] = useState(false);
    const chatEndRef = useRef<HTMLDivElement>(null);
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+    // Audio recording state & handlers
+    const [recording, setRecording] = useState(false);
+    const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+    const [audioUrl, setAudioUrl] = useState<string>('');
+    const [recordingSeconds, setRecordingSeconds] = useState(0);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const recordingIntervalRef = useRef<any>(null);
+
+    const startRecording = async () => {
+       try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const mediaRecorder = new MediaRecorder(stream);
+          mediaRecorderRef.current = mediaRecorder;
+          
+          const chunks: BlobPart[] = [];
+          mediaRecorder.ondataavailable = (e) => {
+             if (e.data.size > 0) chunks.push(e.data);
+          };
+          
+          mediaRecorder.onstop = () => {
+             const blob = new Blob(chunks, { type: 'audio/wav' });
+             setAudioBlob(blob);
+             setAudioUrl(URL.createObjectURL(blob));
+             stream.getTracks().forEach(track => track.stop());
+          };
+          
+          setAudioBlob(null);
+          setAudioUrl('');
+          setRecordingSeconds(0);
+          mediaRecorder.start();
+          setRecording(true);
+          
+          recordingIntervalRef.current = setInterval(() => {
+             setRecordingSeconds(prev => prev + 1);
+          }, 1000);
+       } catch (err) {
+          console.error('Failed to start recording:', err);
+          alert("Impossible d'accéder au microphone.");
+       }
+    };
+
+    const stopRecording = () => {
+       if (mediaRecorderRef.current && recording) {
+          mediaRecorderRef.current.stop();
+          setRecording(false);
+          if (recordingIntervalRef.current) {
+             clearInterval(recordingIntervalRef.current);
+          }
+       }
+    };
+
+    const formatDuration = (s: number) => {
+       const mins = Math.floor(s / 60);
+       const secs = s % 60;
+       return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
 
    useEffect(() => {
       fetchDocuments();
@@ -427,7 +495,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
    }, []);
 
    useEffect(() => {
-      // Poll queue state if any task is pending or processing
       const hasActiveTasks = queueTasks.some(t => t.status === 'pending' || t.status === 'processing');
       if (hasActiveTasks) {
          const timer = setInterval(() => {
@@ -465,10 +532,13 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                ...item,
                id: item.uid || item.id
             }));
+            console.log(`[Dashboard] Fetched ${items.length} documents`);
             setDocuments(items);
          }
       } catch (err) {
          console.error('Failed to fetch documents', err);
+      } finally {
+         setLoading(false);
       }
    };
 
@@ -482,7 +552,8 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
       } catch (err) {
          console.error('Failed to fetch onboarding options', err);
       }
-   };   // Unified Import Action (PDF upload or URL import with context note)
+   };
+
    const handleUnifiedImport = async (e: React.FormEvent) => {
       e.preventDefault();
       
@@ -503,7 +574,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
             });
 
             if (res.ok) {
-               const data = await res.json();
                setUrlInput('');
                setContextNoteInput('');
                setUploadSuccess(true);
@@ -511,7 +581,7 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                fetchQueue();
                setMessages(prev => [
                   ...prev,
-                  { role: 'assistant', content: `Importation de l'URL lancée en arrière-plan. Vous pouvez suivre la tâche dans la file d'attente d'importation.` }
+                  { role: 'assistant', content: `Importation de l'URL lancée en arrière-plan.` }
                ]);
                setTimeout(() => setUploadSuccess(false), 2000);
             } else {
@@ -540,7 +610,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                body: formData
             });
             if (res.ok) {
-               const data = await res.json();
                setMarkdownInput('');
                setContextNoteInput('');
                setUploadSuccess(true);
@@ -548,12 +617,54 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                fetchQueue();
                setMessages(prev => [
                   ...prev,
-                  { role: 'assistant', content: `Traitement du texte collé lancé en arrière-plan. Vous pouvez suivre l'avancement dans la file d'attente.` }
+                  { role: 'assistant', content: `Traitement du texte collé lancé en arrière-plan.` }
                ]);
                setTimeout(() => setUploadSuccess(false), 3000);
             } else {
                const errData = await res.json();
                alert(`Erreur d'importation du texte: ${errData.error}`);
+            }
+         } catch (err) {
+            alert('Erreur réseau lors de l\'importation');
+         } finally {
+            setUploading(false);
+         }
+      } else if (importType === 'audio') {
+         if (!audioBlob && selectedFiles.length === 0) return;
+         setUploading(true);
+         setUploadSuccess(false);
+
+         const formData = new FormData();
+         if (audioBlob) {
+            formData.append('file', audioBlob, `vocal-${Date.now()}.wav`);
+            formData.append('recordedLive', 'true');
+         } else {
+            formData.append('file', selectedFiles[0]);
+         }
+         formData.append('category', categoryFilter === 'all' ? 'inbox' : categoryFilter);
+         formData.append('contextNote', contextNoteInput.trim());
+
+         try {
+            const res = await fetch('/api/upload', {
+               method: 'POST',
+               body: formData
+            });
+            if (res.ok) {
+               setAudioBlob(null);
+               setAudioUrl('');
+               setSelectedFiles([]);
+               setContextNoteInput('');
+               setUploadSuccess(true);
+               setShowUploadModal(false);
+               fetchQueue();
+               setMessages(prev => [
+                  ...prev,
+                  { role: 'assistant', content: `Traitement de la note vocale lancé en arrière-plan.` }
+               ]);
+               setTimeout(() => setUploadSuccess(false), 3000);
+            } else {
+               const errData = await res.json();
+               alert(`Erreur d'importation de l'audio: ${errData.error}`);
             }
          } catch (err) {
             alert('Erreur réseau lors de l\'importation');
@@ -578,7 +689,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                body: formData
             });
             if (res.ok) {
-               const data = await res.json();
                setSelectedFiles([]);
                setContextNoteInput('');
                setUploadSuccess(true);
@@ -587,7 +697,7 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                const filesLabel = selectedFiles.map(f => `"${f.name}"`).join(', ');
                setMessages(prev => [
                   ...prev,
-                  { role: 'assistant', content: `Traitement des fichiers (${filesLabel}) lancé en arrière-plan. Suivez l'analyse dans la file d'attente d'importation.` }
+                  { role: 'assistant', content: `Traitement des fichiers (${filesLabel}) lancé en arrière-plan.` }
                ]);
                setTimeout(() => setUploadSuccess(false), 3000);
             } else {
@@ -602,7 +712,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
       }
    };
 
-   // Onboarding initialization
    const handleInitializeOnboarding = async () => {
       if (selectedInterests.length === 0) {
          alert('Veuillez sélectionner au moins un centre d\'intérêt pour démarrer.');
@@ -628,7 +737,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
       }
    };
 
-   // Send Message to Copilot
    const handleSendMessage = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!inputMessage.trim() || sending) return;
@@ -650,7 +758,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
          });
 
          if (res.ok && res.body) {
-            // Add an empty assistant message as a placeholder for streaming content
             setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
             
             const reader = res.body.getReader();
@@ -664,7 +771,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
 
                buffer += decoder.decode(value, { stream: true });
                const lines = buffer.split('\n\n');
-               // Leave the last partial line in the buffer
                buffer = lines.pop() || '';
 
                for (const line of lines) {
@@ -720,7 +826,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
       }
    };
 
-   // Update category of document
    const handleUpdateCategory = async (doc: ContentItemData, newCat: string) => {
       try {
          const res = await fetch(`/api/content/${doc.id}`, {
@@ -739,7 +844,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
       }
    };
 
-    // Delete document execution
     const executeDeleteDoc = async (id: string) => {
        try {
           const res = await fetch(`/api/content/${id}`, {
@@ -756,7 +860,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
        }
     };
 
-   // Reindex all directories
    const handleReindex = async () => {
       setReindexing(true);
       try {
@@ -778,7 +881,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
       }
    };
 
-   // Helper for category card colors
    const getCategoryCardClass = (cat?: string) => {
       switch (cat) {
          case 'work': return 'card-teal';
@@ -805,53 +907,33 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
        );
     });
 
-   return (
-<div className="app-container">
+    const resetRecording = () => {};
+
+    return (
+       <div className="app-container">
+          {loading ? (
+             <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flex: 1,
+                minHeight: '400px',
+                flexDirection: 'column',
+                gap: '16px',
+                color: 'white'
+             }}>
+                <IconLoader2 style={{ animation: 'spin 1.5s linear infinite', color: 'var(--color-vivid-green)' }} size={40} />
+                <span style={{ fontSize: '15px', color: 'rgba(255,255,255,0.6)', fontWeight: '500' }}>Chargement de Modaka...</span>
+             </div>
+          ) : (
+             <>
           {/* Top Header */}
           <header style={{ padding: '24px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'linear-gradient(135deg, var(--color-vivid-green), #06b6d4)', display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center', fontWeight: 900 }}>SB</div>
-                <h1 style={{ fontSize: '24px', letterSpacing: '-0.5px' }}>Second Brain</h1>
+                <h1 style={{ fontSize: '24px', letterSpacing: '-0.5px' }}>Modaka</h1>
              </div>
              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <div 
-                     style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}
-                     onClick={() => {
-                        const next = !devMode;
-                        setDevMode(next);
-                        document.cookie = `sb_dev_mode=${next}; path=/; max-age=31536000; SameSite=Lax`;
-                        if (!next) setShowRawViewer(false);
-                     }}
-                  >
-                     <span style={{ fontSize: '13px', color: devMode ? '#ffffff' : 'rgba(255,255,255,0.5)', fontWeight: '500', transition: 'color 0.2s' }}>Mode Dev</span>
-                     <div 
-                        style={{
-                           width: '40px',
-                           height: '22px',
-                           borderRadius: '11px',
-                           backgroundColor: devMode ? 'var(--color-vivid-green)' : 'rgba(255,255,255,0.08)',
-                           border: '1px solid rgba(255,255,255,0.1)',
-                           position: 'relative',
-                           display: 'flex',
-                           alignItems: 'center',
-                           padding: '2px',
-                           boxSizing: 'border-box',
-                           transition: 'background-color 0.2s'
-                        }}
-                     >
-                        <div 
-                           style={{
-                              width: '16px',
-                              height: '16px',
-                              borderRadius: '50%',
-                              backgroundColor: '#ffffff',
-                              boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-                              transform: devMode ? 'translateX(18px)' : 'translateX(0)',
-                              transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
-                           }}
-                        />
-                      </div>
-                  </div>
 
                  <button
                      onClick={() => setShowProfileModal(true)}
@@ -886,11 +968,10 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
           </header>
 
           {documents.length === 0 ? (
-             /* Onboarding Screen */
              <main style={{ flex: 1, padding: '40px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', maxWidth: '600px', margin: '0 auto', gap: '24px' }}>
                 <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                    <div style={{ width: '64px', height: '64px', borderRadius: '16px', background: 'linear-gradient(135deg, var(--color-vivid-green), #06b6d4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', fontSize: '28px', fontWeight: 900 }}>🧠</div>
-                   <h2 style={{ fontSize: '28px', color: 'var(--color-vivid-green)', letterSpacing: '-0.5px', marginTop: '12px' }}>Bienvenue dans votre Second Brain</h2>
+                   <h2 style={{ fontSize: '28px', color: 'var(--color-vivid-green)', letterSpacing: '-0.5px', marginTop: '12px' }}>Bienvenue dans Modaka</h2>
                    <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '15px', lineHeight: '1.5' }}>
                       Votre base de connaissances locale-first est prête. Sélectionnez vos passions et centres d'intérêt pour initialiser la première structure de dossiers :
                    </p>
@@ -995,14 +1076,12 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                    className="action-button"
                    style={{ width: '100%', height: '52px', fontSize: '16px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                 >
-                   {initializing ? <IconLoader2 style={{ animation: 'spin 1s linear infinite' }} size={22} /> : 'Initialiser mon Second Brain'}
+                   {initializing ? <IconLoader2 style={{ animation: 'spin 1s linear infinite' }} size={22} /> : 'Initialiser Modaka'}
                 </button>
              </main>
           ) : (
-             /* Main Tabs Panel */
              <main style={{ flex: 1, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
             
-            {/* VIEW 1: Chat Copilot */}
             {activeTab === 'chat' && (
                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px', minHeight: '300px' }}>
@@ -1087,7 +1166,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                      <div ref={chatEndRef} />
                   </div>
 
-                  {/* Chat input block (76px high) */}
                   <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '10px', marginTop: 'auto', position: 'sticky', bottom: '10px' }}>
                      <input 
                         type="text" 
@@ -1104,22 +1182,181 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                </div>
             )}
 
-            {/* VIEW 2: Documents List */}
             {activeTab === 'docs' && (
                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                  {/* Category filters & Import button */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
-                     <h2 style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px' }}>Mes documents</h2>
-                     <button 
-                        onClick={() => setShowUploadModal(true)}
-                        className="action-button"
-                        style={{ height: '40px', padding: '0 16px', fontSize: '13px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}
-                     >
-                        <IconUpload size={16} /> Importer
-                     </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h2 style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px', margin: 0 }}>Mes documents</h2>
+                     </div>
+                     
+                     <div style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: 'repeat(5, 1fr)', 
+                        gap: '8px',
+                        width: '100%'
+                     }}>
+                        <button 
+                           onClick={() => { setImportType('pdf'); setSelectedFiles([]); setShowUploadModal(true); }}
+                           style={{ 
+                              border: '1px solid rgba(255,255,255,0.06)', 
+                              cursor: 'pointer', 
+                              padding: '14px 6px', 
+                              display: 'flex', 
+                              flexDirection: 'column',
+                              alignItems: 'center', 
+                              justifyContent: 'center',
+                              gap: '6px', 
+                              background: 'rgba(255,255,255,0.01)', 
+                              color: '#fff', 
+                              borderRadius: '16px', 
+                              transition: 'all 0.2s ease-in-out',
+                              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                           }}
+                           onMouseEnter={(e) => { 
+                              e.currentTarget.style.borderColor = '#38bdf8'; 
+                              e.currentTarget.style.background = 'rgba(56, 189, 248, 0.06)';
+                              e.currentTarget.style.transform = 'translateY(-2px)';
+                           }}
+                           onMouseLeave={(e) => { 
+                              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; 
+                              e.currentTarget.style.background = 'rgba(255,255,255,0.01)';
+                              e.currentTarget.style.transform = 'translateY(0)';
+                           }}
+                        >
+                           <IconUpload size={22} style={{ color: '#38bdf8' }} />
+                           <span style={{ fontSize: '11px', fontWeight: '600' }}>Fichier</span>
+                        </button>
+                        
+                        <button 
+                           onClick={() => { setImportType('image'); setSelectedFiles([]); setShowUploadModal(true); }}
+                           style={{ 
+                              border: '1px solid rgba(255,255,255,0.06)', 
+                              cursor: 'pointer', 
+                              padding: '14px 6px', 
+                              display: 'flex', 
+                              flexDirection: 'column',
+                              alignItems: 'center', 
+                              justifyContent: 'center',
+                              gap: '6px', 
+                              background: 'rgba(255,255,255,0.01)', 
+                              color: '#fff', 
+                              borderRadius: '16px', 
+                              transition: 'all 0.2s ease-in-out',
+                              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                           }}
+                           onMouseEnter={(e) => { 
+                              e.currentTarget.style.borderColor = '#c084fc'; 
+                              e.currentTarget.style.background = 'rgba(192, 132, 252, 0.06)';
+                              e.currentTarget.style.transform = 'translateY(-2px)';
+                           }}
+                           onMouseLeave={(e) => { 
+                              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; 
+                              e.currentTarget.style.background = 'rgba(255,255,255,0.01)';
+                              e.currentTarget.style.transform = 'translateY(0)';
+                           }}
+                        >
+                           <IconCamera size={22} style={{ color: '#c084fc' }} />
+                           <span style={{ fontSize: '11px', fontWeight: '600' }}>Image</span>
+                        </button>
+                        
+                        <button 
+                           onClick={() => { setImportType('text'); setSelectedFiles([]); setShowUploadModal(true); }}
+                           style={{ 
+                              border: '1px solid rgba(255,255,255,0.06)', 
+                              cursor: 'pointer', 
+                              padding: '14px 6px', 
+                              display: 'flex', 
+                              flexDirection: 'column',
+                              alignItems: 'center', 
+                              justifyContent: 'center',
+                              gap: '6px', 
+                              background: 'rgba(255,255,255,0.01)', 
+                              color: '#fff', 
+                              borderRadius: '16px', 
+                              transition: 'all 0.2s ease-in-out',
+                              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                           }}
+                           onMouseEnter={(e) => { 
+                              e.currentTarget.style.borderColor = '#fbbf24'; 
+                              e.currentTarget.style.background = 'rgba(251, 191, 36, 0.06)';
+                              e.currentTarget.style.transform = 'translateY(-2px)';
+                           }}
+                           onMouseLeave={(e) => { 
+                              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; 
+                              e.currentTarget.style.background = 'rgba(255,255,255,0.01)';
+                              e.currentTarget.style.transform = 'translateY(0)';
+                           }}
+                        >
+                           <IconFileText size={22} style={{ color: '#fbbf24' }} />
+                           <span style={{ fontSize: '11px', fontWeight: '600' }}>Note</span>
+                        </button>
+                        
+                        <button 
+                           onClick={() => { setImportType('audio'); setSelectedFiles([]); setShowUploadModal(true); }}
+                           style={{ 
+                              border: '1px solid rgba(255,255,255,0.06)', 
+                              cursor: 'pointer', 
+                              padding: '14px 6px', 
+                              display: 'flex', 
+                              flexDirection: 'column',
+                              alignItems: 'center', 
+                              justifyContent: 'center',
+                              gap: '6px', 
+                              background: 'rgba(255,255,255,0.01)', 
+                              color: '#fff', 
+                              borderRadius: '16px', 
+                              transition: 'all 0.2s ease-in-out',
+                              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                           }}
+                           onMouseEnter={(e) => { 
+                              e.currentTarget.style.borderColor = '#f43f5e'; 
+                              e.currentTarget.style.background = 'rgba(244, 63, 94, 0.06)';
+                              e.currentTarget.style.transform = 'translateY(-2px)';
+                           }}
+                           onMouseLeave={(e) => { 
+                              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; 
+                              e.currentTarget.style.background = 'rgba(255,255,255,0.01)';
+                              e.currentTarget.style.transform = 'translateY(0)';
+                           }}
+                        >
+                           <IconMicrophone size={22} style={{ color: '#f43f5e' }} />
+                           <span style={{ fontSize: '11px', fontWeight: '600' }}>Vocal</span>
+                        </button>
+                        
+                        <button 
+                           onClick={() => { setImportType('url'); setSelectedFiles([]); setShowUploadModal(true); }}
+                           style={{ 
+                              border: '1px solid rgba(255,255,255,0.06)', 
+                              cursor: 'pointer', 
+                              padding: '14px 6px', 
+                              display: 'flex', 
+                              flexDirection: 'column',
+                              alignItems: 'center', 
+                              justifyContent: 'center',
+                              gap: '6px', 
+                              background: 'rgba(255,255,255,0.01)', 
+                              color: '#fff', 
+                              borderRadius: '16px', 
+                              transition: 'all 0.2s ease-in-out',
+                              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                           }}
+                           onMouseEnter={(e) => { 
+                              e.currentTarget.style.borderColor = '#2dd4bf'; 
+                              e.currentTarget.style.background = 'rgba(45, 212, 191, 0.06)';
+                              e.currentTarget.style.transform = 'translateY(-2px)';
+                           }}
+                           onMouseLeave={(e) => { 
+                              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; 
+                              e.currentTarget.style.background = 'rgba(255,255,255,0.01)';
+                              e.currentTarget.style.transform = 'translateY(0)';
+                           }}
+                        >
+                           <IconDownload size={22} style={{ color: '#2dd4bf' }} />
+                           <span style={{ fontSize: '11px', fontWeight: '600' }}>Lien</span>
+                        </button>
+                     </div>
                   </div>
 
-                  {/* Import Queue Panel */}
                   {queueTasks.some(t => t.status === 'pending' || t.status === 'processing' || t.status === 'failed') && (
                      <div 
                         style={{ 
@@ -1179,7 +1416,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                      </div>
                   )}
 
-                  {/* Search and Category Filter Toolbar */}
                   <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
                      <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
                         <input 
@@ -1283,7 +1519,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                                </div>
                             )}
 
-                            {/* Move category actions */}
                             <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                <p className="secondary-meta" style={{ fontSize: '13px', margin: 0 }}>Classer le document :</p>
                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -1394,7 +1629,6 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                       </div>
                    )}
 
-                  {/* Documents feed */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px' }}>
                      {filteredDocs.length === 0 ? (
                         <div className="card-grey" style={{ textAlign: 'center', padding: '40px' }}>
@@ -1495,15 +1729,12 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                </div>
             )}
 
-            {/* VIEW 3: Export & Stats */}
             {activeTab === 'stats' && (
                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                  {/* Giant KPI metric display */}
                   <div className="card-teal" style={{ textAlign: 'center', padding: '30px' }}>
                      <p className="secondary-meta" style={{ fontSize: '16px', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Documents</p>
                      <div className="giant-metric" style={{ margin: '16px 0' }}>{documents.length}</div>
-                     <span className="secondary-meta">Indexés et prêts dans votre Second Brain</span>
-                     {/* Category breakdown cards */}
+                     <span className="secondary-meta">Indexés et prêts dans Modaka</span>
                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
                         {Array.from(new Set(documents.map(d => d.category).filter(Boolean))).map((cat, idx) => {
                            const count = documents.filter(d => d.category === cat).length;
@@ -1521,13 +1752,11 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                      </div>
                   </div>
 
-                  {/* CSV Export Action Button (76px high) */}
                   <a href="/api/export-csv" className="action-button" style={{ textDecoration: 'none', marginTop: '20px' }}>
                      <IconDownload size={24} />
                      Exporter la base en CSV
                   </a>
 
-                  {/* Reindexing Action Button */}
                   <button 
                      onClick={handleReindex}
                      className="action-button btn-secondary"
@@ -1591,58 +1820,32 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                   }}
                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                     <h3 style={{ fontSize: '18px', fontWeight: 'bold' }}>Importer un document</h3>
+                     <h3 style={{ fontSize: '18px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {importType === 'pdf' && <><IconUpload size={20} style={{ color: '#38bdf8' }} /> Importer des fichiers PDF</>}
+                        {importType === 'image' && <><IconCamera size={20} style={{ color: '#c084fc' }} /> Importer des images</>}
+                        {importType === 'url' && <><IconDownload size={20} style={{ color: '#2dd4bf' }} /> Importer un lien Web</>}
+                        {importType === 'text' && <><IconFileText size={20} style={{ color: '#fbbf24' }} /> Créer une note</>}
+                        {importType === 'audio' && <><IconMicrophone size={20} style={{ color: '#f43f5e' }} /> Enregistrer une note vocale</>}
+                     </h3>
                      <button 
-                        onClick={() => setShowUploadModal(false)}
+                        onClick={() => {
+                           setShowUploadModal(false);
+                           stopRecording();
+                        }}
                         style={{ background: 'none', border: 'none', color: '#fff', fontSize: '18px', cursor: 'pointer', opacity: 0.6 }}
                      >
                         ✕
                      </button>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                     <button 
-                        type="button"
-                        onClick={() => { setImportType('pdf'); setSelectedFile(null); }}
-                        className={`status-badge ${importType === 'pdf' ? 'status-optimal' : 'status-nominal'}`}
-                        style={{ border: 'none', cursor: 'pointer', padding: '8px 12px', flex: '1 1 40%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '13px' }}
-                     >
-                        <IconUpload size={16} /> PDF
-                     </button>
-                     <button 
-                        type="button"
-                        onClick={() => { setImportType('image'); setSelectedFile(null); }}
-                        className={`status-badge ${importType === 'image' ? 'status-optimal' : 'status-nominal'}`}
-                        style={{ border: 'none', cursor: 'pointer', padding: '8px 12px', flex: '1 1 40%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '13px' }}
-                     >
-                        <IconCamera size={16} /> Image
-                     </button>
-                     <button 
-                        type="button"
-                        onClick={() => { setImportType('url'); setSelectedFile(null); }}
-                        className={`status-badge ${importType === 'url' ? 'status-optimal' : 'status-nominal'}`}
-                        style={{ border: 'none', cursor: 'pointer', padding: '8px 12px', flex: '1 1 40%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '13px' }}
-                     >
-                        <IconDownload size={16} /> Lien Web
-                     </button>
-                     <button 
-                        type="button"
-                        onClick={() => { setImportType('text'); setSelectedFile(null); }}
-                        className={`status-badge ${importType === 'text' ? 'status-optimal' : 'status-nominal'}`}
-                        style={{ border: 'none', cursor: 'pointer', padding: '8px 12px', flex: '1 1 40%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '13px' }}
-                     >
-                        <IconFileText size={16} /> Texte / MD
-                     </button>
-                  </div>
-
                   <form onSubmit={handleUnifiedImport} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                     {importType === 'pdf' ? (
+                     {importType === 'pdf' && (
                         <div>
                            <label style={{ display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center', height: 'auto', minHeight: '48px', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: '12px', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.01)', transition: 'border-color 0.2s', width: '100%', padding: '8px 12px', boxSizing: 'border-box' }}>
                               <span style={{ fontSize: '14px', color: selectedFiles.length > 0 ? 'var(--color-vivid-green)' : 'rgba(255,255,255,0.5)', textAlign: 'center', wordBreak: 'break-word' }}>
                                  {selectedFiles.length > 0 
                                     ? `Fichiers (${selectedFiles.length}) : ${selectedFiles.map(f => f.name).join(', ')}` 
-                                    : 'Sélectionner un ou plusieurs fichiers PDF...'}
+                                    : "Sélectionner un ou plusieurs fichiers PDF..."}
                               </span>
                               <input 
                                  type="file" 
@@ -1653,13 +1856,15 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                               />
                            </label>
                         </div>
-                     ) : importType === 'image' ? (
+                     )}
+                     
+                     {importType === 'image' && (
                         <div>
                            <label style={{ display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center', height: 'auto', minHeight: '48px', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: '12px', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.01)', transition: 'border-color 0.2s', width: '100%', padding: '8px 12px', boxSizing: 'border-box' }}>
                               <span style={{ fontSize: '14px', color: selectedFiles.length > 0 ? 'var(--color-vivid-green)' : 'rgba(255,255,255,0.5)', textAlign: 'center', wordBreak: 'break-word' }}>
                                  {selectedFiles.length > 0 
                                     ? `Images (${selectedFiles.length}) : ${selectedFiles.map(f => f.name).join(', ')}` 
-                                    : 'Prendre ou sélectionner une ou plusieurs images...'}
+                                    : "Prendre ou sélectionner une ou plusieurs images..."}
                               </span>
                               <input 
                                  type="file" 
@@ -1670,33 +1875,37 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                               />
                            </label>
                         </div>
-                     ) : importType === 'url' ? (
+                     )}
+
+                     {importType === 'url' && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            <input 
-                               type="url" 
-                               className="action-input"
-                               placeholder="URL de la page web (ex: https://example.com/article)..."
-                               value={urlInput}
-                               onChange={(e) => setUrlInput(e.target.value)}
-                               disabled={addingUrl}
-                               required
-                               style={{ width: '100%', boxSizing: 'border-box' }}
-                            />
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                               <label style={{ fontSize: '12px', opacity: 0.6 }}>Profondeur de crawling :</label>
-                               <select 
-                                  className="action-input"
-                                  value={crawlDepth}
-                                  onChange={(e) => setCrawlDepth(parseInt(e.target.value))}
-                                  style={{ width: '100%', boxSizing: 'border-box', backgroundColor: '#182030', color: '#fff', border: '1px solid rgba(255,255,255,0.08)' }}
-                               >
-                                  <option value={0}>Page principale uniquement (Profondeur 0)</option>
-                                  <option value={1}>Page principale + Liens directs (Profondeur 1)</option>
-                                  <option value={2}>Page principale + Liens directs + secondaires (Profondeur 2)</option>
-                               </select>
-                            </div>
-                         </div>
-                     ) : (
+                           <input 
+                              type="url" 
+                              className="action-input"
+                              placeholder="URL de la page web (ex: https://example.com/article)..."
+                              value={urlInput}
+                              onChange={(e) => setUrlInput(e.target.value)}
+                              disabled={addingUrl}
+                              required
+                              style={{ width: '100%', boxSizing: 'border-box' }}
+                           />
+                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <label style={{ fontSize: '12px', opacity: 0.6 }}>Profondeur de crawling :</label>
+                              <select 
+                                 className="action-input"
+                                 value={crawlDepth}
+                                 onChange={(e) => setCrawlDepth(parseInt(e.target.value))}
+                                 style={{ width: '100%', boxSizing: 'border-box', backgroundColor: '#182030', color: '#fff', border: '1px solid rgba(255,255,255,0.08)' }}
+                              >
+                                 <option value={0}>Page principale uniquement (Profondeur 0)</option>
+                                 <option value={1}>Page principale + Liens directs (Profondeur 1)</option>
+                                 <option value={2}>Page principale + Liens directs + secondaires (Profondeur 2)</option>
+                              </select>
+                           </div>
+                        </div>
+                     )}
+
+                     {importType === 'text' && (
                         <textarea 
                            className="action-input"
                            placeholder="Collez ici votre texte brut ou Markdown provenant d'une autre conversation LLM..."
@@ -1707,6 +1916,127 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                            rows={8}
                            style={{ minHeight: '150px', resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
                         />
+                     )}
+
+                     {importType === 'audio' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', alignItems: 'center', justifyContent: 'center', padding: '16px 8px', width: '100%' }}>
+                           {recording ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{
+                                       width: '12px',
+                                       height: '12px',
+                                       borderRadius: '50%',
+                                       backgroundColor: '#f43f5e',
+                                       display: 'inline-block',
+                                       animation: 'pulse 1.2s infinite alternate'
+                                    }} />
+                                    <span style={{ fontSize: '18px', fontWeight: 'bold', fontFamily: 'monospace' }}>
+                                       {formatDuration(recordingSeconds)}
+                                    </span>
+                                 </div>
+                                 <button 
+                                    type="button"
+                                    onClick={stopRecording}
+                                    className="action-button btn-secondary"
+                                    style={{
+                                       borderColor: '#f43f5e',
+                                       backgroundColor: 'rgba(244, 63, 94, 0.08)',
+                                       color: '#f43f5e',
+                                       height: '46px',
+                                       padding: '0 24px',
+                                       borderRadius: '14px'
+                                    }}
+                                 >
+                                    <IconPlayerStop size={16} /> Arrêter l'enregistrement
+                                 </button>
+                              </div>
+                           ) : audioUrl ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', alignItems: 'center' }}>
+                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-vivid-green)' }}>
+                                    <IconCircleCheck size={18} />
+                                    <span style={{ fontSize: '13px', fontWeight: '600' }}>Enregistrement terminé</span>
+                                 </div>
+                                 <audio src={audioUrl} controls style={{ width: '100%', borderRadius: '8px' }} />
+                                 <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+                                    <button 
+                                       type="button"
+                                       onClick={startRecording}
+                                       className="action-button btn-secondary"
+                                       style={{ flex: 1, height: '40px', fontSize: '13px' }}
+                                    >
+                                       Recommencer
+                                    </button>
+                                    <button 
+                                       type="button"
+                                       onClick={() => {
+                                          setAudioBlob(null);
+                                          setAudioUrl('');
+                                       }}
+                                       className="action-button btn-secondary"
+                                       style={{ borderColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', height: '40px', fontSize: '13px' }}
+                                    >
+                                       Effacer
+                                    </button>
+                                 </div>
+                              </div>
+                           ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', alignItems: 'center' }}>
+                                 <button 
+                                    type="button"
+                                    onClick={startRecording}
+                                    className="action-button"
+                                    style={{
+                                       backgroundColor: 'var(--color-vivid-red)',
+                                       color: '#fff',
+                                       height: '52px',
+                                       borderRadius: '16px',
+                                       padding: '0 24px',
+                                       fontWeight: 'bold',
+                                       width: '100%',
+                                       display: 'flex',
+                                       justifyContent: 'center',
+                                       alignItems: 'center',
+                                       gap: '8px',
+                                       boxShadow: '0 4px 12px rgba(244, 63, 94, 0.3)'
+                                    }}
+                                 >
+                                    <IconMicrophone size={20} /> Commencer l'enregistrement
+                                 </button>
+                                 
+                                 <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', margin: '8px 0' }}>
+                                    <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.06)' }} />
+                                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>OU</span>
+                                    <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.06)' }} />
+                                 </div>
+
+                                 <label style={{ display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center', height: '42px', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: '12px', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.01)', width: '100%', padding: '0 12px', boxSizing: 'border-box' }}>
+                                    <span style={{ fontSize: '13px', color: selectedFiles.length > 0 ? 'var(--color-vivid-green)' : 'rgba(255,255,255,0.4)', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                       {selectedFiles.length > 0 
+                                          ? `Audio sélectionné : ${selectedFiles[0].name}` 
+                                          : 'Sélectionner un fichier audio...'}
+                                    </span>
+                                    <input 
+                                       type="file" 
+                                       accept="audio/*" 
+                                       onChange={(e) => {
+                                          setSelectedFiles(Array.from(e.target.files || []));
+                                          setAudioBlob(null);
+                                          setAudioUrl('');
+                                       }} 
+                                       style={{ display: 'none' }} 
+                                    />
+                                 </label>
+                              </div>
+                           )}
+                           
+                           <style>{`
+                              @keyframes pulse {
+                                 from { opacity: 0.4; transform: scale(0.9); }
+                                 to { opacity: 1; transform: scale(1.1); }
+                              }
+                           `}</style>
+                        </div>
                      )}
 
                      <textarea 
@@ -1722,13 +2052,13 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                      <button 
                         type="submit" 
                         className="action-button" 
-                        disabled={uploading || addingUrl || (importType === 'pdf' && selectedFiles.length === 0) || (importType === 'image' && selectedFiles.length === 0) || (importType === 'url' && !urlInput.trim()) || (importType === 'text' && !markdownInput.trim())}
+                        disabled={uploading || addingUrl || recording || (importType === 'pdf' && selectedFiles.length === 0) || (importType === 'image' && selectedFiles.length === 0) || (importType === 'url' && !urlInput.trim()) || (importType === 'text' && !markdownInput.trim()) || (importType === 'audio' && !audioBlob && selectedFiles.length === 0)}
                         style={{ height: '48px', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                      >
                         {(uploading || addingUrl) ? (
                            <IconLoader2 style={{ animation: 'spin 1s linear infinite' }} size={20} />
                         ) : (
-                           'Importer et analyser avec l\'IA'
+                           "Importer et analyser avec l'IA"
                         )}
                      </button>
                   </form>
@@ -1889,6 +2219,59 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                         </>
                      )}
 
+                     <div 
+                        style={{ 
+                           display: 'flex', 
+                           alignItems: 'center', 
+                           justifyContent: 'space-between', 
+                           padding: '12px 16px', 
+                           borderRadius: '12px', 
+                           backgroundColor: 'rgba(255,255,255,0.02)', 
+                           border: '1px solid rgba(255,255,255,0.06)',
+                           marginTop: '4px',
+                           cursor: 'pointer',
+                           userSelect: 'none'
+                        }}
+                        onClick={() => {
+                           const next = !devMode;
+                           setDevMode(next);
+                           document.cookie = `sb_dev_mode=${next}; path=/; max-age=31536000; SameSite=Lax`;
+                           if (!next) setShowRawViewer(false);
+                        }}
+                     >
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                           <span style={{ fontSize: '14px', fontWeight: '600', color: '#fff' }}>Mode Développeur</span>
+                           <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>Affiche les performances d'I/O et de l'IA</span>
+                        </div>
+                        <div 
+                           style={{
+                              width: '40px',
+                              height: '22px',
+                              borderRadius: '11px',
+                              backgroundColor: devMode ? 'var(--color-vivid-green)' : 'rgba(255,255,255,0.08)',
+                              border: '1px solid rgba(255,255,255,0.1)',
+                              position: 'relative',
+                              display: 'flex',
+                              alignItems: 'center',
+                              padding: '2px',
+                              boxSizing: 'border-box',
+                              transition: 'background-color 0.2s'
+                           }}
+                        >
+                           <div 
+                              style={{
+                                 width: '16px',
+                                 height: '16px',
+                                 borderRadius: '50%',
+                                 backgroundColor: '#ffffff',
+                                 boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                                 transform: devMode ? 'translateX(18px)' : 'translateX(0)',
+                                 transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                              }}
+                           />
+                        </div>
+                     </div>
+
                      <button 
                         type="submit" 
                         className="action-button" 
@@ -1900,11 +2283,9 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                </div>
             </div>
          )}
-
-         </main>
+          </main>
       )}
 
-          {/* Sticky Bottom Navigation (96px high) */}
           {documents.length > 0 && (
              <nav className="bottom-nav">
                 <button 
@@ -1934,14 +2315,12 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
              </nav>
           )}
           
-          {/* Keyframe animation for spinner */}
           <style>{`
              @keyframes spin {
                 0% { transform: rotate(0deg); }
                 100% { transform: rotate(360deg); }
              }
           `}</style>
-          {/* docToDelete HTML Modal */}
           {docToDelete && (
              <div 
                 style={{
@@ -2055,11 +2434,7 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                    </div>
 
                    <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
-                      {['all', ...Array.from(new Set(documents.map(d => d.category).filter(Boolean))).filter(cat => {
-                         const lastSegment = cat.split('/').pop();
-                         const isWebsiteSubfolder = documents.some(doc => doc.type === 'website' && doc.id === lastSegment);
-                         return !isWebsiteSubfolder;
-                      })].map(cat => (
+                      {['all', ...Array.from(new Set(documents.map(d => d.category).filter(Boolean)))].map(cat => (
                          <button 
                             key={cat}
                             onClick={() => {
@@ -2083,6 +2458,8 @@ export default function Dashboard({ initialDevMode = false }: { initialDevMode?:
                    </div>
                 </div>
              </div>
+          )}
+          </>
           )}
        </div>
     );

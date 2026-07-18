@@ -4,6 +4,8 @@ import '../styles/global.css';
 
 const devModeCookie = Astro.cookies.get('sb_dev_mode');
 const initialDevMode = devModeCookie ? devModeCookie.value === 'true' : false;
+const elevenLabsApiKey = import.meta.env.ELEVENLABS_API_KEY || '';
+const elevenLabsVoiceId = import.meta.env.ELEVENLABS_VOICE_ID || '';
 ---
 
 <html lang="fr">
@@ -12,7 +14,7 @@ const initialDevMode = devModeCookie ? devModeCookie.value === 'true' : false;
     <link rel="icon" type="image/png" href="/icon-192.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="generator" content={Astro.generator} />
-    <title>Second Brain - Tactile Knowledge Base</title>
+    <title>Modaka - Tactile Knowledge Base</title>
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#12141c" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -20,7 +22,12 @@ const initialDevMode = devModeCookie ? devModeCookie.value === 'true' : false;
     <meta name="description" content="Personal mobile-first knowledge base with Astro and Gemini" />
   </head>
   <body>
-    <Dashboard client:load initialDevMode={initialDevMode} />
+    <Dashboard 
+      client:load 
+      initialDevMode={initialDevMode} 
+      defaultElevenLabsApiKey={elevenLabsApiKey} 
+      defaultElevenLabsVoiceId={elevenLabsVoiceId} 
+    />
 
     <script is:inline>
       if ('serviceWorker' in navigator) {

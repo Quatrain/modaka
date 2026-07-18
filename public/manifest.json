@@ -1,6 +1,6 @@
 {
-  "name": "Second Brain",
-  "short_name": "Second Brain",
+  "name": "Modaka",
+  "short_name": "Modaka",
   "description": "Tactile and touch-first PWA knowledge management system",
   "start_url": "/",
   "display": "standalone",
