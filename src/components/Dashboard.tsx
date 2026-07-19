@@ -312,6 +312,24 @@ export default function Dashboard({
          'Italiano': 'it-IT'
       };
 
+      if ((window as any).ReactNativeWebView && userProfile.ttsProvider !== 'ElevenLabs') {
+         if (speakingIndex === index) {
+            (window as any).ReactNativeWebView.postMessage(JSON.stringify({
+               type: 'STOP_SPEAK'
+            }));
+            setSpeakingIndex(null);
+         } else {
+            setSpeakingIndex(index);
+            const cleanText = text.replace(/[#*`[\]()]/g, '');
+            (window as any).ReactNativeWebView.postMessage(JSON.stringify({
+               type: 'SPEAK',
+               text: cleanText,
+               language: LANG_MAP[userProfile.language] || 'fr-FR'
+            }));
+         }
+         return;
+      }
+
       if (speakingIndex === index) {
          if (userProfile.ttsProvider === 'ElevenLabs') {
             if (activeAudioRef.current) {
@@ -860,6 +878,8 @@ export default function Dashboard({
          } else if (data.type === 'RECORDING_ERROR') {
             alert(`Erreur d'enregistrement : ${data.error}`);
             setIsDictating(false);
+         } else if (data.type === 'SPEECH_DONE' || data.type === 'SPEECH_ERROR') {
+            setSpeakingIndex(null);
          }
       };
       return () => {
