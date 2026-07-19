@@ -315,6 +315,24 @@ export default function Dashboard({
       };
    }, []);
 
+   useEffect(() => {
+      (window as any).handleNativeMessage = (data: any) => {
+         if (data.type === 'RECORDING_STATE') {
+            setIsDictating(data.isRecording);
+         } else if (data.type === 'TRANSCRIPTION_RESULT') {
+            if (data.text) {
+               setInputMessage(prev => prev ? `${prev} ${data.text}` : data.text);
+            }
+         } else if (data.type === 'RECORDING_ERROR') {
+            alert(`Erreur d'enregistrement : ${data.error}`);
+            setIsDictating(false);
+         }
+      };
+      return () => {
+         delete (window as any).handleNativeMessage;
+      };
+   }, []);
+
    const handleToggleSpeech = async (text: string, index: number) => {
       const LANG_MAP: Record<string, string> = {
          'Français': 'fr-FR',
@@ -842,6 +860,13 @@ export default function Dashboard({
    };
 
     const handleDictation = () => {
+       if ((window as any).ReactNativeWebView) {
+          (window as any).ReactNativeWebView.postMessage(JSON.stringify({
+             type: 'TOGGLE_RECORDING'
+          }));
+          return;
+       }
+
        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
        if (SpeechRecognition) {
           if (isDictating) {
