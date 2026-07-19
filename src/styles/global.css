@@ -36,7 +36,9 @@ body {
   font-family: var(--font-body);
   display: flex;
   justify-content: center;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 /* Constrained mobile-first container */
@@ -45,12 +47,12 @@ body {
   max-width: 1200px;
   margin: 0 auto;
   background-color: var(--color-container-bg);
-  min-height: 100vh;
+  height: 100%;
   position: relative;
   display: flex;
   flex-direction: column;
   box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
-  padding-bottom: calc(var(--height-nav) + 20px); /* Leave room for sticky bottom nav */
+  overflow: hidden;
 }
 
 /* Typography styles */
@@ -72,13 +74,9 @@ h1, h2, h3, h4, .font-heading {
 
 /* Sticky bottom navigation (96px height) */
 .bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
   width: 100%;
-  max-width: 1200px;
-  height: var(--height-nav);
+  height: calc(var(--height-nav) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
   background-color: rgba(18, 20, 28, 0.95);
   backdrop-filter: blur(10px);
   border-top: 1px solid rgba(255, 255, 255, 0.1);
@@ -86,6 +84,7 @@ h1, h2, h3, h4, .font-heading {
   justify-content: space-around;
   align-items: center;
   z-index: 100;
+  box-sizing: border-box;
 }
 
 .nav-item {

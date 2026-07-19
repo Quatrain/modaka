@@ -479,7 +479,7 @@ export default function Dashboard({
    const [onboardingOptions, setOnboardingOptions] = useState<any[]>([]);
    const [initializing, setInitializing] = useState(false);
    const [messages, setMessages] = useState<Message[]>([
-      { role: 'assistant', content: 'Bonjour ! Je suis votre Copilot Modaka. Vous pouvez uploader des PDFs dans l\'onglet "Documents" pour que je puisse les synthétiser et y accéder, ou simplement me poser des questions.' }
+      { role: 'assistant', content: 'Bonjour ! Je suis Modaka. Vous pouvez uploader des PDFs dans l\'onglet "Documents" pour que je puisse les synthétiser et y accéder, ou simplement me poser des questions.' }
    ]);
    const [inputMessage, setInputMessage] = useState('');
    const [sending, setSending] = useState(false);
@@ -1290,11 +1290,11 @@ export default function Dashboard({
                 </button>
              </main>
           ) : (
-             <main style={{ flex: 1, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+             <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
             
             {activeTab === 'chat' && (
-               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px', minHeight: '300px' }}>
+               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0, padding: '20px 20px 0 20px' }}>
+                  <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px', paddingRight: '4px' }}>
                      {messages.map((msg, i) => (
                         <div 
                            key={i} 
@@ -1370,13 +1370,13 @@ export default function Dashboard({
                      {sending && (
                         <div className="card-grey" style={{ alignSelf: 'flex-start', maxWidth: '80%', display: 'flex', alignItems: 'center', gap: '10px' }}>
                            <IconLoader2 style={{ animation: 'spin 1s linear infinite' }} size={20} />
-                           <span className="secondary-meta">Copilot analyse vos documents...</span>
+                           <span className="secondary-meta">Modaka analyse vos documents...</span>
                         </div>
                      )}
                      <div ref={chatEndRef} />
                   </div>
 
-                  <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '10px', marginTop: 'auto', position: 'sticky', bottom: '10px' }}>
+                  <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '10px', padding: '15px 0 20px 0', backgroundColor: 'var(--color-container-bg)' }}>
                      <input 
                         type="text" 
                         className="action-input"
@@ -1417,7 +1417,7 @@ export default function Dashboard({
             )}
 
             {activeTab === 'docs' && (
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+               <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', padding: '20px 20px 30px 20px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <h2 style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px', margin: 0 }}>Mes documents</h2>
@@ -1951,7 +1951,7 @@ export default function Dashboard({
             )}
 
             {activeTab === 'stats' && (
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+               <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', padding: '20px 20px 30px 20px' }}>
                   <div className="card-teal" style={{ textAlign: 'center', padding: '30px' }}>
                      <p className="secondary-meta" style={{ fontSize: '16px', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Documents</p>
                      <div className="giant-metric" style={{ margin: '16px 0' }}>{documents.length}</div>
@@ -2619,7 +2619,7 @@ export default function Dashboard({
                    style={{ background: 'none', border: 'none', cursor: 'pointer' }}
                 >
                    <IconMessage size={28} />
-                   <span style={{ marginTop: '4px' }}>Copilot</span>
+                   <span style={{ marginTop: '4px' }}>Modaka</span>
                 </button>
                 <button 
                    className={`nav-item ${activeTab === 'docs' ? 'active' : ''}`}
