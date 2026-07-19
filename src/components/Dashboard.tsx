@@ -155,6 +155,7 @@ export default function Dashboard({
    const recognitionRef = useRef<any>(null);
    const mediaRecorderChatRef = useRef<MediaRecorder | null>(null);
    const audioChunksChatRef = useRef<BlobPart[]>([]);
+   const shouldSpeakNextRef = useRef(false);
    const [reindexing, setReindexing] = useState(false);
    const [queueTasks, setQueueTasks] = useState<any[]>([]);
    const [crawlDepth, setCrawlDepth] = useState<number>(0);
@@ -744,6 +745,7 @@ export default function Dashboard({
       const userText = (overrideText !== undefined ? overrideText : inputMessage).trim();
       if (!userText || sending) return;
 
+      shouldSpeakNextRef.current = !!overrideText;
       setInputMessage('');
       setMessages(prev => [...prev, { role: 'user', content: userText }]);
       setSending(true);
@@ -801,6 +803,10 @@ export default function Dashboard({
                               };
                               return next;
                            });
+                           if (shouldSpeakNextRef.current) {
+                              handleToggleSpeech(accumulatedText, messages.length + 1);
+                              shouldSpeakNextRef.current = false;
+                           }
                         } else if (parsed.text) {
                            accumulatedText += parsed.text;
                            setMessages(prev => {
