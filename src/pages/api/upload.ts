@@ -32,6 +32,7 @@ export const POST: APIRoute = async ({ request }) => {
       const textContent = (formData.get('textContent') as string) || '';
       const contextNote = (formData.get('contextNote') as string) || '';
       const formCategory = (formData.get('category') as string) || 'inbox';
+      const formSource = (formData.get('source') as string) || '';
       const recordedLive = formData.get('recordedLive') === 'true';
 
       const latitudeStr = formData.get('latitude') as string || '';
@@ -60,6 +61,9 @@ export const POST: APIRoute = async ({ request }) => {
             const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(cleanFileName);
             const isAudio = file.type.startsWith('audio/') || /\.(mp3|wav|m4a|ogg|webm|caf)$/i.test(cleanFileName);
 
+            // Calculate unique file hash (SHA-256)
+            const fileHash = crypto.createHash('sha256').update(buffer).digest('hex');
+
             const tempFilePath = path.join(tempDir, `${crypto.randomUUID()}-${cleanFileName}`);
             await fs.writeFile(tempFilePath, buffer);
 
@@ -72,7 +76,9 @@ export const POST: APIRoute = async ({ request }) => {
                contextNote,
                recordedLive,
                latitude,
-               longitude
+               longitude,
+               fileHash,
+               source: formSource || cleanFileName
             });
             taskIds.push(task.id);
          }
@@ -85,7 +91,8 @@ export const POST: APIRoute = async ({ request }) => {
             category: formCategory,
             contextNote,
             latitude,
-            longitude
+            longitude,
+            source: formSource || 'Copier-coller'
          });
          taskIds.push(task.id);
       }

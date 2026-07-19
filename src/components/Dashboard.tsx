@@ -26,6 +26,8 @@ interface ContentItemData {
    tags?: string[];
    summary?: string;
    originalFileUri?: string;
+   fileHash?: string;
+   source?: string;
    markdownFileUri?: string;
    createdAt?: string;
    contextNote?: string;
@@ -406,6 +408,8 @@ export default function Dashboard({
          doc.createdAt ? `timestamp: ${doc.createdAt}` : null,
          doc.category ? `category: ${doc.category}` : null,
          doc.originalFileUri ? `originalFileUri: ${doc.originalFileUri}` : null,
+         doc.fileHash ? `fileHash: ${doc.fileHash}` : null,
+         doc.source ? `source: ${JSON.stringify(doc.source)}` : null,
          doc.markdownFileUri ? `markdownFileUri: ${doc.markdownFileUri}` : null,
          doc.contextNote ? `contextNote: ${JSON.stringify(doc.contextNote)}` : null,
          '---'
