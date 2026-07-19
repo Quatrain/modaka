@@ -298,8 +298,36 @@ export default function Dashboard({
       setShowProfileModal(false);
    };
 
-   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
-   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+    const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
+    const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+    const unlockedAudioRef = useRef<HTMLAudioElement | null>(null);
+
+    useEffect(() => {
+       const unlockAudio = () => {
+          if (!unlockedAudioRef.current) {
+             const audio = new Audio();
+             audio.play().then(() => {
+                audio.pause();
+                unlockedAudioRef.current = audio;
+             }).catch(() => {});
+          }
+          if (typeof window !== 'undefined' && window.speechSynthesis) {
+             try {
+                const u = new SpeechSynthesisUtterance('');
+                u.volume = 0;
+                window.speechSynthesis.speak(u);
+             } catch (_) {}
+          }
+          window.removeEventListener('click', unlockAudio);
+          window.removeEventListener('touchstart', unlockAudio);
+       };
+       window.addEventListener('click', unlockAudio);
+       window.addEventListener('touchstart', unlockAudio);
+       return () => {
+          window.removeEventListener('click', unlockAudio);
+          window.removeEventListener('touchstart', unlockAudio);
+       };
+    }, []);
 
 
 
@@ -383,7 +411,13 @@ export default function Dashboard({
 
                const blob = await response.blob();
                const url = URL.createObjectURL(blob);
-               const audio = new Audio(url);
+               
+               let audio = unlockedAudioRef.current;
+               if (!audio) {
+                  audio = new Audio();
+                  unlockedAudioRef.current = audio;
+               }
+               audio.src = url;
                activeAudioRef.current = audio;
 
                audio.onended = () => {
