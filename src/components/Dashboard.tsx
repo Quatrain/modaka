@@ -148,6 +148,7 @@ export default function Dashboard({
    const [selectedDoc, setSelectedDoc] = useState<ContentItemData | null>(null);
    const [categoryFilter, setCategoryFilter] = useState<string>('all');
    const [showUploadModal, setShowUploadModal] = useState(false);
+   const [showQueueModal, setShowQueueModal] = useState(false);
    const [reindexing, setReindexing] = useState(false);
    const [queueTasks, setQueueTasks] = useState<any[]>([]);
    const [crawlDepth, setCrawlDepth] = useState<number>(0);
@@ -1359,60 +1360,47 @@ export default function Dashboard({
 
                   {queueTasks.some(t => t.status === 'pending' || t.status === 'processing' || t.status === 'failed') && (
                      <div 
+                        onClick={() => setShowQueueModal(true)}
                         style={{ 
                            backgroundColor: 'rgba(255, 255, 255, 0.02)', 
-                           padding: '16px', 
+                           padding: '12px 16px', 
                            borderRadius: '16px', 
                            border: '1px solid rgba(255, 255, 255, 0.06)', 
                            display: 'flex', 
-                           flexDirection: 'column', 
-                           gap: '12px' 
+                           alignItems: 'center', 
+                           justifyContent: 'space-between',
+                           cursor: 'pointer',
+                           transition: 'all 0.2s ease',
+                           gap: '12px'
+                        }}
+                        onMouseEnter={(e) => {
+                           e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.04)';
+                           e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+                        }}
+                        onMouseLeave={(e) => {
+                           e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.02)';
+                           e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)';
                         }}
                      >
-                        <h3 style={{ fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px', margin: 0, color: 'var(--color-vivid-yellow)' }}>
-                           <IconLoader2 size={16} style={{ animation: 'spin 1.5s linear infinite' }} />
-                           File d'attente d'importation
-                        </h3>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                           {queueTasks
-                              .filter(t => t.status === 'pending' || t.status === 'processing' || t.status === 'failed')
-                              .map(task => (
-                                 <div 
-                                    key={task.id} 
-                                    style={{ 
-                                       display: 'flex', 
-                                       flexDirection: 'column', 
-                                       gap: '6px', 
-                                       padding: '12px', 
-                                       borderRadius: '12px', 
-                                       backgroundColor: 'rgba(255, 255, 255, 0.01)', 
-                                       border: '1px solid rgba(255, 255, 255, 0.03)' 
-                                    }}
-                                 >
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                       <span style={{ fontSize: '13px', fontWeight: '500', maxWidth: '70%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                          {task.name}
-                                       </span>
-                                       <span 
-                                          className={`status-badge ${task.status === 'processing' ? 'status-optimal' : task.status === 'failed' ? 'status-critical' : 'status-nominal'}`} 
-                                          style={{ fontSize: '10px', padding: '2px 8px', textTransform: 'capitalize' }}
-                                       >
-                                          {task.status === 'processing' ? 'Analyse...' : task.status === 'failed' ? 'Échec' : 'En attente'}
-                                       </span>
-                                    </div>
-                                    {task.status === 'processing' && (
-                                       <div style={{ width: '100%', height: '4px', backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: '2px', overflow: 'hidden', marginTop: '2px' }}>
-                                          <div style={{ width: `${task.progress}%`, height: '100%', backgroundColor: 'var(--color-vivid-green)', transition: 'width 0.3s ease' }} />
-                                       </div>
-                                    )}
-                                    {task.status === 'failed' && task.error && (
-                                       <span style={{ fontSize: '11px', color: '#ef4444', marginTop: '2px' }}>
-                                          Erreur : {task.error}
-                                       </span>
-                                    )}
-                                 </div>
-                              ))}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                           {queueTasks.some(t => t.status === 'pending' || t.status === 'processing') ? (
+                              <IconLoader2 size={16} style={{ animation: 'spin 1.5s linear infinite', color: 'var(--color-vivid-yellow)', flexShrink: 0 }} />
+                           ) : (
+                              <span style={{ color: '#ef4444', fontSize: '14px', flexShrink: 0 }}>⚠️</span>
+                           )}
+                           <span style={{ fontSize: '13px', fontWeight: '600', color: 'rgba(255,255,255,0.9)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              File d'attente :{' '}
+                              {[
+                                 queueTasks.filter(t => t.status === 'pending' || t.status === 'processing').length > 0
+                                    ? `${queueTasks.filter(t => t.status === 'pending' || t.status === 'processing').length} action(s) en attente`
+                                    : null,
+                                 queueTasks.filter(t => t.status === 'failed').length > 0
+                                    ? `${queueTasks.filter(t => t.status === 'failed').length} erreur(s)`
+                                    : null
+                              ].filter(Boolean).join(', ')}
+                           </span>
                         </div>
+                        <span style={{ fontSize: '11px', color: '#00e599', fontWeight: '600', flexShrink: 0 }}>Voir les détails ➔</span>
                      </div>
                   )}
 
@@ -2062,6 +2050,110 @@ export default function Dashboard({
                         )}
                      </button>
                   </form>
+               </div>
+            </div>
+         )}
+
+         {showQueueModal && (
+            <div 
+               style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(9, 13, 22, 0.85)',
+                  backdropFilter: 'blur(12px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 1000,
+                  padding: '20px',
+                  boxSizing: 'border-box'
+               }}
+               onClick={(e) => {
+                  if (e.target === e.currentTarget) {
+                     setShowQueueModal(false);
+                  }
+               }}
+            >
+               <div 
+                  style={{
+                     backgroundColor: '#131924',
+                     padding: '24px',
+                     borderRadius: '24px',
+                     border: '1px solid rgba(255,255,255,0.08)',
+                     maxWidth: '600px',
+                     width: '100%',
+                     maxHeight: '80vh',
+                     boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+                     display: 'flex',
+                     flexDirection: 'column',
+                     gap: '16px',
+                     position: 'relative'
+                  }}
+               >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     <h3 style={{ fontSize: '18px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', margin: 0, color: 'var(--color-vivid-yellow)' }}>
+                        <IconLoader2 size={20} style={{ animation: 'spin 1.5s linear infinite' }} />
+                        File d'attente d'importation
+                     </h3>
+                     <button 
+                        onClick={() => setShowQueueModal(false)}
+                        style={{ background: 'none', border: 'none', color: '#fff', fontSize: '18px', cursor: 'pointer', opacity: 0.6 }}
+                     >
+                        ✕
+                     </button>
+                  </div>
+
+                  <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', paddingRight: '4px' }}>
+                     {queueTasks.filter(t => t.status === 'pending' || t.status === 'processing' || t.status === 'failed').length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '24px', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>
+                           Aucune tâche active dans la file d'attente.
+                        </div>
+                     ) : (
+                        queueTasks
+                           .filter(t => t.status === 'pending' || t.status === 'processing' || t.status === 'failed')
+                           .map(task => (
+                              <div 
+                                 key={task.id} 
+                                 style={{ 
+                                    display: 'flex', 
+                                    flexDirection: 'column', 
+                                    gap: '8px', 
+                                    padding: '16px', 
+                                    borderRadius: '16px', 
+                                    backgroundColor: 'rgba(255, 255, 255, 0.02)', 
+                                    border: '1px solid rgba(255, 255, 255, 0.04)' 
+                                 }}
+                              >
+                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                                       {task.name || 'Tâche sans nom'}
+                                    </span>
+                                    <span 
+                                       className={`status-badge ${task.status === 'processing' ? 'status-optimal' : task.status === 'failed' ? 'status-critical' : 'status-nominal'}`} 
+                                       style={{ fontSize: '11px', padding: '4px 10px', textTransform: 'capitalize' }}
+                                    >
+                                       {task.status === 'processing' ? 'Analyse...' : task.status === 'failed' ? 'Échec' : 'En attente'}
+                                    </span>
+                                 </div>
+                                 
+                                 {task.status === 'processing' && (
+                                    <div style={{ width: '100%', height: '6px', backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: '3px', overflow: 'hidden', marginTop: '4px' }}>
+                                       <div style={{ width: `${task.progress || 0}%`, height: '100%', backgroundColor: 'var(--color-vivid-green)', transition: 'width 0.3s ease' }} />
+                                    </div>
+                                 )}
+
+                                 {task.status === 'failed' && task.error && (
+                                    <div style={{ fontSize: '12px', color: '#ef4444', marginTop: '4px', backgroundColor: 'rgba(239, 68, 68, 0.08)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
+                                       <strong>Erreur :</strong> {task.error}
+                                    </div>
+                                 )}
+                              </div>
+                           ))
+                     )}
+                  </div>
                </div>
             </div>
          )}
