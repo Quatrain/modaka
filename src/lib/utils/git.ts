@@ -7,6 +7,9 @@ const execPromise = promisify(exec);
 
 /**
  * Conditionally runs `git add` on a file if it is located inside an active Git repository.
+ *
+ * @param filePath - The absolute or relative path to the file to check and add.
+ * @returns A promise that resolves when the git operations have completed.
  */
 export async function gitAddIfRepo(filePath: string): Promise<void> {
    const dir = path.dirname(filePath);

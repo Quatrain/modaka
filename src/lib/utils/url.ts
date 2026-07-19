@@ -1,5 +1,8 @@
 /**
  * Normalizes a URL by stripping trailing slashes and ensuring unified structure.
+ *
+ * @param urlStr - The raw URL string to normalize.
+ * @returns The normalized URL string, or the input string if invalid.
  */
 export function normalizeUrl(urlStr: string): string {
    try {
@@ -12,6 +15,10 @@ export function normalizeUrl(urlStr: string): string {
 
 /**
  * Extracts and filters same-origin links from an HTML body (ignoring assets/binaries).
+ *
+ * @param html - The raw HTML content to search for links.
+ * @param baseUrl - The base URL of the page being crawled to resolve relative links.
+ * @returns A unique list of resolved same-origin URL strings.
  */
 export function extractLinks(html: string, baseUrl: string): string[] {
    const links: string[] = [];
