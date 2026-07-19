@@ -914,6 +914,8 @@ export default function Dashboard({
             setIsDictating(false);
          } else if (data.type === 'SPEECH_DONE' || data.type === 'SPEECH_ERROR') {
             setSpeakingIndex(null);
+         } else if (data.type === 'NATIVE_LOG') {
+            console.log('[Native Log from App.tsx]', data.message);
          }
       };
       return () => {
