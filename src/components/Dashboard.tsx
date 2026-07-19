@@ -150,9 +150,11 @@ export default function Dashboard({
    const [selectedDoc, setSelectedDoc] = useState<ContentItemData | null>(null);    
    const [categoryFilter, setCategoryFilter] = useState<string>('all');
    const [showUploadModal, setShowUploadModal] = useState(false);
-   const [showQueueModal, setShowQueueModal] = useState(false);
+   const [showQueueModal, setShowQueueModal] = useState(false);    
    const [isDictating, setIsDictating] = useState(false);
    const recognitionRef = useRef<any>(null);
+   const mediaRecorderChatRef = useRef<MediaRecorder | null>(null);
+   const audioChunksChatRef = useRef<BlobPart[]>([]);
    const [reindexing, setReindexing] = useState(false);
    const [queueTasks, setQueueTasks] = useState<any[]>([]);
    const [crawlDepth, setCrawlDepth] = useState<number>(0);
@@ -306,6 +308,9 @@ export default function Dashboard({
          }
          if (recognitionRef.current) {
             recognitionRef.current.stop();
+         }
+         if (mediaRecorderChatRef.current && mediaRecorderChatRef.current.state !== 'inactive') {
+            mediaRecorderChatRef.current.stop();
          }
       };
    }, []);
@@ -836,56 +841,111 @@ export default function Dashboard({
       }
    };
 
-   const handleDictation = () => {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-         alert("La reconnaissance vocale n'est pas supportée par votre navigateur.");
-         return;
-      }
+    const handleDictation = () => {
+       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+       if (SpeechRecognition) {
+          if (isDictating) {
+             if (recognitionRef.current) {
+                recognitionRef.current.stop();
+             }
+             setIsDictating(false);
+          } else {
+             const recognition = new SpeechRecognition();
+             recognitionRef.current = recognition;
+             recognition.continuous = false;
+             recognition.interimResults = false;
+             
+             const LANG_MAP: Record<string, string> = {
+                'Français': 'fr-FR',
+                'English': 'en-US',
+                'Español': 'es-ES',
+                'Deutsch': 'de-DE',
+                'Italiano': 'it-IT'
+             };
+             recognition.lang = LANG_MAP[userProfile.language] || 'fr-FR';
 
-      if (isDictating) {
-         if (recognitionRef.current) {
-            recognitionRef.current.stop();
-         }
-         setIsDictating(false);
-      } else {
-         const recognition = new SpeechRecognition();
-         recognitionRef.current = recognition;
-         recognition.continuous = false;
-         recognition.interimResults = false;
-         
-         const LANG_MAP: Record<string, string> = {
-            'Français': 'fr-FR',
-            'English': 'en-US',
-            'Español': 'es-ES',
-            'Deutsch': 'de-DE',
-            'Italiano': 'it-IT'
-         };
-         recognition.lang = LANG_MAP[userProfile.language] || 'fr-FR';
+             recognition.onstart = () => {
+                setIsDictating(true);
+             };
 
-         recognition.onstart = () => {
-            setIsDictating(true);
-         };
+             recognition.onresult = (event: any) => {
+                const transcript = event.results[0][0].transcript;
+                if (transcript) {
+                   setInputMessage(prev => prev ? `${prev} ${transcript}` : transcript);
+                }
+             };
 
-         recognition.onresult = (event: any) => {
-            const transcript = event.results[0][0].transcript;
-            if (transcript) {
-               setInputMessage(prev => prev ? `${prev} ${transcript}` : transcript);
-            }
-         };
+             recognition.onerror = (event: any) => {
+                console.error('Speech recognition error:', event.error);
+                setIsDictating(false);
+             };
 
-         recognition.onerror = (event: any) => {
-            console.error('Speech recognition error:', event.error);
-            setIsDictating(false);
-         };
+             recognition.onend = () => {
+                setIsDictating(false);
+             };
 
-         recognition.onend = () => {
-            setIsDictating(false);
-         };
+             recognition.start();
+          }
+       } else {
+          // Fallback: use MediaRecorder!
+          if (isDictating) {
+             if (mediaRecorderChatRef.current && mediaRecorderChatRef.current.state !== 'inactive') {
+                mediaRecorderChatRef.current.stop();
+             }
+             setIsDictating(false);
+          } else {
+             startAudioRecordingFallback();
+          }
+       }
+    };
 
-         recognition.start();
-      }
-   };
+    const startAudioRecordingFallback = async () => {
+       try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const mediaRecorder = new MediaRecorder(stream);
+          mediaRecorderChatRef.current = mediaRecorder;
+          audioChunksChatRef.current = [];
+
+          mediaRecorder.ondataavailable = (e) => {
+             if (e.data.size > 0) {
+                audioChunksChatRef.current.push(e.data);
+             }
+          };
+
+          mediaRecorder.onstop = async () => {
+             const blob = new Blob(audioChunksChatRef.current, { type: 'audio/wav' });
+             stream.getTracks().forEach(track => track.stop());
+
+             // Now upload and transcribe the audio
+             try {
+                const formData = new FormData();
+                formData.append('file', blob, 'dictation.wav');
+
+                const response = await fetch('/api/transcribe', {
+                   method: 'POST',
+                   body: formData
+                });
+
+                if (response.ok) {
+                   const data = await response.json();
+                   if (data.text) {
+                      setInputMessage(prev => prev ? `${prev} ${data.text}` : data.text);
+                   }
+                } else {
+                   console.error('Failed to transcribe audio via fallback');
+                }
+             } catch (err) {
+                console.error('Error uploading dictation audio:', err);
+             }
+          };
+
+          mediaRecorder.start();
+          setIsDictating(true);
+       } catch (err) {
+          console.error('Failed to start fallback audio recording:', err);
+          alert("La reconnaissance vocale n'est pas supportée par votre appareil, et l'accès au microphone a échoué.");
+       }
+    };
 
    const handleUpdateCategory = async (doc: ContentItemData, newCat: string) => {
       try {
