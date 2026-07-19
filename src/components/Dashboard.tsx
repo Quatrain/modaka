@@ -147,10 +147,12 @@ export default function Dashboard({
    const [documents, setDocuments] = useState<ContentItemData[]>([]);
    const [uploading, setUploading] = useState(false);
    const [uploadSuccess, setUploadSuccess] = useState(false);
-   const [selectedDoc, setSelectedDoc] = useState<ContentItemData | null>(null);
+   const [selectedDoc, setSelectedDoc] = useState<ContentItemData | null>(null);    
    const [categoryFilter, setCategoryFilter] = useState<string>('all');
    const [showUploadModal, setShowUploadModal] = useState(false);
    const [showQueueModal, setShowQueueModal] = useState(false);
+   const [isDictating, setIsDictating] = useState(false);
+   const recognitionRef = useRef<any>(null);
    const [reindexing, setReindexing] = useState(false);
    const [queueTasks, setQueueTasks] = useState<any[]>([]);
    const [crawlDepth, setCrawlDepth] = useState<number>(0);
@@ -301,6 +303,9 @@ export default function Dashboard({
          window.speechSynthesis.cancel();
          if (activeAudioRef.current) {
             activeAudioRef.current.pause();
+         }
+         if (recognitionRef.current) {
+            recognitionRef.current.stop();
          }
       };
    }, []);
@@ -831,6 +836,57 @@ export default function Dashboard({
       }
    };
 
+   const handleDictation = () => {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+         alert("La reconnaissance vocale n'est pas supportée par votre navigateur.");
+         return;
+      }
+
+      if (isDictating) {
+         if (recognitionRef.current) {
+            recognitionRef.current.stop();
+         }
+         setIsDictating(false);
+      } else {
+         const recognition = new SpeechRecognition();
+         recognitionRef.current = recognition;
+         recognition.continuous = false;
+         recognition.interimResults = false;
+         
+         const LANG_MAP: Record<string, string> = {
+            'Français': 'fr-FR',
+            'English': 'en-US',
+            'Español': 'es-ES',
+            'Deutsch': 'de-DE',
+            'Italiano': 'it-IT'
+         };
+         recognition.lang = LANG_MAP[userProfile.language] || 'fr-FR';
+
+         recognition.onstart = () => {
+            setIsDictating(true);
+         };
+
+         recognition.onresult = (event: any) => {
+            const transcript = event.results[0][0].transcript;
+            if (transcript) {
+               setInputMessage(prev => prev ? `${prev} ${transcript}` : transcript);
+            }
+         };
+
+         recognition.onerror = (event: any) => {
+            console.error('Speech recognition error:', event.error);
+            setIsDictating(false);
+         };
+
+         recognition.onend = () => {
+            setIsDictating(false);
+         };
+
+         recognition.start();
+      }
+   };
+
    const handleUpdateCategory = async (doc: ContentItemData, newCat: string) => {
       try {
          const res = await fetch(`/api/content/${doc.id}`, {
@@ -1175,14 +1231,38 @@ export default function Dashboard({
                      <input 
                         type="text" 
                         className="action-input"
-                        placeholder="Posez une question sur vos documents..."
+                        placeholder={isDictating ? "Dictée en cours... Parlez maintenant." : "Posez une question sur vos documents..."}
                         value={inputMessage}
                         onChange={(e) => setInputMessage(e.target.value)}
                         disabled={sending}
                      />
-                     <button type="submit" className="action-button" style={{ width: '76px' }} disabled={sending}>
-                        <IconSend size={24} />
-                     </button>
+                     {!inputMessage.trim() ? (
+                        <button 
+                           type="button" 
+                           onClick={handleDictation}
+                           className="action-button" 
+                           style={{ 
+                              width: '76px', 
+                              backgroundColor: isDictating ? '#ef4444' : undefined,
+                              borderColor: isDictating ? '#ef4444' : undefined,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              boxShadow: isDictating ? '0 0 12px rgba(239, 68, 68, 0.4)' : undefined,
+                           }} 
+                           disabled={sending}
+                        >
+                           {isDictating ? (
+                              <IconPlayerStop size={24} style={{ color: '#fff' }} />
+                           ) : (
+                              <IconMicrophone size={24} style={{ color: '#fff' }} />
+                           )}
+                        </button>
+                     ) : (
+                        <button type="submit" className="action-button" style={{ width: '76px' }} disabled={sending}>
+                           <IconSend size={24} />
+                        </button>
+                     )}
                   </form>
                </div>
             )}
