@@ -2,19 +2,23 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { Readable } from 'node:stream';
-import { Log } from '@quatrain/log';
 import { Storage } from '@quatrain/storage';
-import { Backend } from '@quatrain/backend';
 import { Ingestion } from '@quatrain/ingestion';
 import { Queue } from '@quatrain/queue';
 import { ContentItem } from './models/ContentItem';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fetchHtmlWithJs } from './browser';
-import { initBackend } from './backend';
 
+let backendPromise: Promise<void> | null = null;
 function ensureBackend() {
-   initBackend();
+   if (!backendPromise) {
+      backendPromise = import('./backend').then(({ initBackend }) => {
+         initBackend();
+      }).catch(e => {
+         Queue.error(`[Queue] Failed to initialize backend dynamically: ${e.message}`);
+      });
+   }
 }
 
 const execPromise = promisify(exec);
@@ -25,7 +29,7 @@ async function gitAddIfRepo(filePath: string) {
       const { stdout } = await execPromise('git rev-parse --is-inside-work-tree', { cwd: dir });
       if (stdout.trim() === 'true') {
          await execPromise(`git add "${path.basename(filePath)}"`, { cwd: dir });
-         Log.info(`[Git] Added file to index: ${filePath}`);
+         Queue.info(`[Git] Added file to index: ${filePath}`);
       }
    } catch (e) {
       // not a git repo or git not found, ignore silently
@@ -126,18 +130,18 @@ class QueueManagerClass {
    public startListening() {
       if (this.isListening) return;
       this.isListening = true;
-      Log.info('[QueueManager] Registering background queue listener on topic "ingestion"');
+      Queue.info('[QueueManager] Registering background queue listener on topic "ingestion"');
       
       const adapter = Queue.getQueue<any>();
       adapter.listen('ingestion', async (task: any, options: { updateProgress: Function }) => {
-         Log.info(`[Queue] Processing task ${task.name || 'unnamed'}`);
+         Queue.info(`[Queue] Processing task ${task.name || 'unnamed'}`);
          try {
             await this.executeTask(task, async (progress: number) => {
                await options.updateProgress(progress);
             });
-            Log.info(`[Queue] Completed task ${task.name || 'unnamed'}`);
+            Queue.info(`[Queue] Completed task ${task.name || 'unnamed'}`);
          } catch (err: any) {
-            Log.error(`[Queue] Failed task ${task.name || 'unnamed'}: ${err.message || err}`);
+            Queue.error(`[Queue] Failed task ${task.name || 'unnamed'}: ${err.message || err}`);
             throw err;
          }
       });
@@ -208,11 +212,11 @@ class QueueManagerClass {
             const stat = await fs.stat(filePath);
             if (stat.isFile() && (now - stat.mtimeMs > ONE_DAY)) {
                await fs.unlink(filePath);
-               Log.info(`[Queue Cleanup] Deleted old temporary file: ${filePath}`);
+               Queue.info(`[Queue Cleanup] Deleted old temporary file: ${filePath}`);
             }
          }
       } catch (e: any) {
-         Log.warn(`[Queue Cleanup] Failed to clean old temp files: ${e.message}`);
+         Queue.warn(`[Queue Cleanup] Failed to clean old temp files: ${e.message}`);
       }
    }
 
@@ -225,7 +229,7 @@ class QueueManagerClass {
       let locationContext = '';
       if (task.latitude !== undefined && task.longitude !== undefined) {
          try {
-            Log.info(`[Queue Geocoding] Fetching location for coords: ${task.latitude}, ${task.longitude}`);
+            Queue.info(`[Queue Geocoding] Fetching location for coords: ${task.latitude}, ${task.longitude}`);
             const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${task.latitude}&lon=${task.longitude}&zoom=10`;
             const response = await fetch(url, {
                headers: {
@@ -238,11 +242,11 @@ class QueueManagerClass {
                   const city = data.address.city || data.address.town || data.address.village || data.address.municipality || data.address.county || '';
                   const country = data.address.country || '';
                   locationContext = [city, country].filter(Boolean).join(', ');
-                  Log.info(`[Queue Geocoding] Resolved location to: ${locationContext}`);
+                  Queue.info(`[Queue Geocoding] Resolved location to: ${locationContext}`);
                }
             }
          } catch (e: any) {
-            Log.warn(`[Queue Geocoding] Failed to reverse geocode: ${e.message}`);
+            Queue.warn(`[Queue Geocoding] Failed to reverse geocode: ${e.message}`);
          }
       }
 
@@ -279,7 +283,7 @@ class QueueManagerClass {
          if (!task.url) throw new Error('Missing URL for URL ingestion');
          
          const mainUrl = task.url;
-         Log.info(`[Queue] Fetching main URL: ${mainUrl}`);
+         Queue.info(`[Queue] Fetching main URL: ${mainUrl}`);
          const html = await fetchHtmlWithJs(mainUrl);
          rawText = html
             .replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, '')
@@ -346,7 +350,7 @@ class QueueManagerClass {
                processedUrls.add(normalized);
 
                try {
-                  Log.info(`[Queue] Ingesting Level 1 Sub-document: ${link1}`);
+                  Queue.info(`[Queue] Ingesting Level 1 Sub-document: ${link1}`);
                   const childHtml = await fetchHtmlWithJs(link1);
                   const childRawText = childHtml
                      .replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, '')
@@ -395,7 +399,7 @@ class QueueManagerClass {
                      }
                   }
                } catch (err) {
-                  Log.warn(`[Queue] Failed to crawl Level 1 link ${link1}: ${err}`);
+                  Queue.warn(`[Queue] Failed to crawl Level 1 link ${link1}: ${err}`);
                }
 
                const currentProgress = Math.min(70, Math.floor(20 + progressStep));
@@ -414,7 +418,7 @@ class QueueManagerClass {
                processedUrls.add(normalized);
 
                try {
-                  Log.info(`[Queue] Ingesting Level 2 Sub-document: ${link2}`);
+                  Queue.info(`[Queue] Ingesting Level 2 Sub-document: ${link2}`);
                   const childHtml = await fetchHtmlWithJs(link2);
                   const childRawText = childHtml
                      .replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, '')
@@ -455,7 +459,7 @@ class QueueManagerClass {
 
                   children.push({ id: `${parentSemanticId}/${childSemanticId}`, title: childResult.title, url: link2, level: 2 });
                } catch (err) {
-                  Log.warn(`[Queue] Failed to crawl Level 2 link ${link2}: ${err}`);
+                  Queue.warn(`[Queue] Failed to crawl Level 2 link ${link2}: ${err}`);
                }
 
                const currentProgress = Math.min(90, Math.floor(70 + progressStep));
@@ -464,7 +468,7 @@ class QueueManagerClass {
          }
 
          if (children.length > 0) {
-            Log.info(`[Queue] Appending ${children.length} sub-document links to parent ${parentSemanticId}`);
+            Queue.info(`[Queue] Appending ${children.length} sub-document links to parent ${parentSemanticId}`);
             const childLinksSection = '\n\n## Documents enfants associés\n\n' + 
                children
                   .map(c => `* [${c.title}](${c.id}.md) - Niveau ${c.level} (Source : [lien](${c.url}))`)
@@ -596,10 +600,10 @@ class QueueManagerClass {
                const now = new Date();
                parsed.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
                itemCreatedAt = parsed.toISOString();
-               Log.info(`[Queue] Deducted date found: ${result.deductedDate}. Setting createdAt to ${itemCreatedAt}`);
+               Queue.info(`[Queue] Deducted date found: ${result.deductedDate}. Setting createdAt to ${itemCreatedAt}`);
             }
          } catch (e: any) {
-            Log.warn(`[Queue] Failed to parse deductedDate "${result.deductedDate}": ${e.message}`);
+            Queue.warn(`[Queue] Failed to parse deductedDate "${result.deductedDate}": ${e.message}`);
          }
       } else if (existing) {
          itemCreatedAt = existing.val('createdAt') || new Date().toISOString();
@@ -634,7 +638,7 @@ class QueueManagerClass {
          const { searchAndCreateConcept } = await import('./concept-autolink');
          for (const properNoun of result.properNouns) {
             searchAndCreateConcept(properNoun).catch(e => {
-               Log.warn(`[Queue] Failed to autolink concept "${properNoun}": ${e.message}`);
+               Queue.warn(`[Queue] Failed to autolink concept "${properNoun}": ${e.message}`);
             });
          }
       }
