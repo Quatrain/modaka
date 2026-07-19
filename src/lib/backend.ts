@@ -14,6 +14,8 @@ import { Ingestion } from '@quatrain/ingestion';
 import { OcrIngestionAdapter } from '@quatrain/ingestion-ocr';
 import { AudioIngestionAdapter } from '@quatrain/ingestion-audio';
 import { WebIngestionAdapter } from '@quatrain/ingestion-web';
+import { Queue } from '@quatrain/queue';
+import { SQLiteQueueAdapter } from '@quatrain/queue-sqlite';
 import * as path from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -195,6 +197,12 @@ export function initBackend() {
    Ingestion.addAdapter(new AudioIngestionAdapter(), 'audio');
    Ingestion.addAdapter(new WebIngestionAdapter(), 'web');
 
+   // 6. Initialize Queue Adapter
+   const queueDbPath = path.join(gitLocalPath, 'queue.sqlite');
+   Queue.addQueue(new SQLiteQueueAdapter({
+      config: { database: queueDbPath }
+   }), 'default', true);
+
    // Start background synchronization in local mode
    if (gitMode === 'local' && gitLocalPath) {
       const GIT_SYNC_INTERVAL_KEY = Symbol.for('__second_brain_git_sync_interval');
@@ -209,6 +217,12 @@ export function initBackend() {
          (globalThis as any)[GIT_SYNC_INTERVAL_KEY] = interval;
       }
    }
+
+   import('./queue').then(({ QueueManager }) => {
+      QueueManager.startListening();
+   }).catch(err => {
+      Log.error(`[Backend] Failed to start QueueManager listener: ${err.message}`);
+   });
 
    initialized = true;
 }

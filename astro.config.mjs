@@ -39,7 +39,14 @@ export default defineConfig({
         '@quatrain/http': path.join(coreDir, 'http/src/index.ts'),
         '@quatrain/ai-gemini': path.join(coreDir, 'ai-gemini/src/index.ts'),
         '@quatrain/ai': path.join(coreDir, 'ai/src/index.ts'),
-        '@quatrain/log': path.join(coreDir, 'log/src/index.ts')
+        '@quatrain/log': path.join(coreDir, 'log/src/index.ts'),
+        '@quatrain/chat': path.join(coreDir, 'chat/src/index.ts'),
+        '@quatrain/ingestion': path.join(coreDir, 'ingestion/src/index.ts'),
+        '@quatrain/ingestion-audio': path.join(coreDir, 'ingestion-audio/src/index.ts'),
+        '@quatrain/ingestion-ocr': path.join(coreDir, 'ingestion-ocr/src/index.ts'),
+        '@quatrain/ingestion-web': path.join(coreDir, 'ingestion-web/src/index.ts'),
+        '@quatrain/queue': path.join(coreDir, 'queue/src/index.ts'),
+        '@quatrain/queue-sqlite': path.join(coreDir, 'queue-sqlite/src/index.ts')
       }
     }
   }
