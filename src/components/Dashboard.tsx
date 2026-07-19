@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { AppConfig } from '../config/AppConfig';
 import { 
    IconMessage, 
    IconFileText, 
@@ -479,7 +480,7 @@ export default function Dashboard({
    const [onboardingOptions, setOnboardingOptions] = useState<any[]>([]);
    const [initializing, setInitializing] = useState(false);
    const [messages, setMessages] = useState<Message[]>([
-      { role: 'assistant', content: 'Bonjour ! Je suis Modaka. Vous pouvez uploader des PDFs dans l\'onglet "Documents" pour que je puisse les synthétiser et y accéder, ou simplement me poser des questions.' }
+      { role: 'assistant', content: `Bonjour ! Je suis ${AppConfig.name}. Vous pouvez uploader des PDFs dans l'onglet "Documents" pour que je puisse les synthétiser et y accéder, ou simplement me poser des questions.` }
    ]);
    const [inputMessage, setInputMessage] = useState('');
    const [sending, setSending] = useState(false);
@@ -1121,6 +1122,7 @@ export default function Dashboard({
 
     return (
        <div className="app-container">
+          <style dangerouslySetInnerHTML={{ __html: AppConfig.getCssVariablesString() }} />
           {loading ? (
              <div style={{
                 display: 'flex',
@@ -1133,15 +1135,15 @@ export default function Dashboard({
                 color: 'white'
              }}>
                 <IconLoader2 style={{ animation: 'spin 1.5s linear infinite', color: 'var(--color-vivid-green)' }} size={40} />
-                <span style={{ fontSize: '15px', color: 'rgba(255,255,255,0.6)', fontWeight: '500' }}>Chargement de Modaka...</span>
+                <span style={{ fontSize: '15px', color: 'rgba(255,255,255,0.6)', fontWeight: '500' }}>Chargement de {AppConfig.name}...</span>
              </div>
           ) : (
              <>
           {/* Top Header */}
           <header style={{ padding: '24px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'linear-gradient(135deg, var(--color-vivid-green), #06b6d4)', display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center', fontWeight: 900 }}>SB</div>
-                <h1 style={{ fontSize: '24px', letterSpacing: '-0.5px' }}>Modaka</h1>
+                <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'linear-gradient(135deg, var(--color-vivid-green), #06b6d4)', display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center', fontWeight: 900 }}>{AppConfig.logoText}</div>
+                <h1 style={{ fontSize: '24px', letterSpacing: '-0.5px' }}>{AppConfig.name}</h1>
              </div>
              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
 
@@ -1180,10 +1182,10 @@ export default function Dashboard({
           {documents.length === 0 ? (
              <main style={{ flex: 1, padding: '40px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', maxWidth: '600px', margin: '0 auto', gap: '24px' }}>
                 <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                   <div style={{ width: '64px', height: '64px', borderRadius: '16px', background: 'linear-gradient(135deg, var(--color-vivid-green), #06b6d4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', fontSize: '28px', fontWeight: 900 }}>🧠</div>
-                   <h2 style={{ fontSize: '28px', color: 'var(--color-vivid-green)', letterSpacing: '-0.5px', marginTop: '12px' }}>Bienvenue dans Modaka</h2>
+                   <div style={{ width: '64px', height: '64px', borderRadius: '16px', background: 'linear-gradient(135deg, var(--color-vivid-green), #06b6d4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', fontSize: '28px', fontWeight: 900 }}>{AppConfig.logoEmoji}</div>
+                   <h2 style={{ fontSize: '28px', color: 'var(--color-vivid-green)', letterSpacing: '-0.5px', marginTop: '12px' }}>Bienvenue dans {AppConfig.name}</h2>
                    <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '15px', lineHeight: '1.5' }}>
-                      Votre base de connaissances locale-first est prête. Sélectionnez vos passions et centres d'intérêt pour initialiser la première structure de dossiers :
+                      {AppConfig.tagline} est prête. Sélectionnez vos passions et centres d'intérêt pour initialiser la première structure de dossiers :
                    </p>
                 </div>
 
@@ -1286,7 +1288,7 @@ export default function Dashboard({
                    className="action-button"
                    style={{ width: '100%', height: '52px', fontSize: '16px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                 >
-                   {initializing ? <IconLoader2 style={{ animation: 'spin 1s linear infinite' }} size={22} /> : 'Initialiser Modaka'}
+                    {initializing ? <IconLoader2 style={{ animation: 'spin 1s linear infinite' }} size={22} /> : `Initialiser ${AppConfig.name}`}
                 </button>
              </main>
           ) : (
@@ -1370,7 +1372,7 @@ export default function Dashboard({
                      {sending && (
                         <div className="card-grey" style={{ alignSelf: 'flex-start', maxWidth: '80%', display: 'flex', alignItems: 'center', gap: '10px' }}>
                            <IconLoader2 style={{ animation: 'spin 1s linear infinite' }} size={20} />
-                           <span className="secondary-meta">Modaka analyse vos documents...</span>
+                           <span className="secondary-meta">{AppConfig.name} analyse vos documents...</span>
                         </div>
                      )}
                      <div ref={chatEndRef} />
@@ -1955,7 +1957,7 @@ export default function Dashboard({
                   <div className="card-teal" style={{ textAlign: 'center', padding: '30px' }}>
                      <p className="secondary-meta" style={{ fontSize: '16px', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Documents</p>
                      <div className="giant-metric" style={{ margin: '16px 0' }}>{documents.length}</div>
-                     <span className="secondary-meta">Indexés et prêts dans Modaka</span>
+                     <span className="secondary-meta">Indexés et prêts dans {AppConfig.name}</span>
                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
                         {Array.from(new Set(documents.map(d => d.category).filter(Boolean))).map((cat, idx) => {
                            const count = documents.filter(d => d.category === cat).length;
@@ -2619,7 +2621,7 @@ export default function Dashboard({
                    style={{ background: 'none', border: 'none', cursor: 'pointer' }}
                 >
                    <IconMessage size={28} />
-                   <span style={{ marginTop: '4px' }}>Modaka</span>
+                   <span style={{ marginTop: '4px' }}>{AppConfig.name}</span>
                 </button>
                 <button 
                    className={`nav-item ${activeTab === 'docs' ? 'active' : ''}`}
