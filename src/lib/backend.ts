@@ -20,6 +20,7 @@ import * as path from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import * as fs from 'node:fs/promises';
+import * as fsSync from 'node:fs';
 
 import dotenv from 'dotenv';
 
@@ -198,7 +199,13 @@ export function initBackend() {
    Ingestion.addAdapter(new WebIngestionAdapter(), 'web');
 
    // 6. Initialize Queue Adapter
-   const queueDbPath = path.join(gitLocalPath, 'queue.sqlite');
+   const queueDbDir = path.resolve(process.cwd(), '.queue');
+   const queueDbPath = path.join(queueDbDir, 'queue.sqlite');
+   try {
+      fsSync.mkdirSync(queueDbDir, { recursive: true });
+   } catch (e) {
+      // directory already exists or error
+   }
    Queue.addQueue(new SQLiteQueueAdapter({
       config: { database: queueDbPath }
    }), 'default', true);
