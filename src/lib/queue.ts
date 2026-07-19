@@ -6,11 +6,16 @@ import { Log } from '@quatrain/log';
 import { Storage } from '@quatrain/storage';
 import { Backend } from '@quatrain/backend';
 import { Ingestion } from '@quatrain/ingestion';
+import { Queue } from '@quatrain/queue';
 import { ContentItem } from './models/ContentItem';
-import { initBackend } from './backend';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fetchHtmlWithJs } from './browser';
+import { initBackend } from './backend';
+
+function ensureBackend() {
+   initBackend();
+}
 
 const execPromise = promisify(exec);
 
@@ -116,12 +121,33 @@ function extractLinks(html: string, baseUrl: string): string[] {
 }
 
 class QueueManagerClass {
-   private tasks: Map<string, Task> = new Map();
-   private isProcessing = false;
+   private isListening = false;
+
+   public startListening() {
+      if (this.isListening) return;
+      this.isListening = true;
+      Log.info('[QueueManager] Registering background queue listener on topic "ingestion"');
+      
+      const adapter = Queue.getQueue<any>();
+      adapter.listen('ingestion', async (task: any, options: { updateProgress: Function }) => {
+         Log.info(`[Queue] Processing task ${task.name || 'unnamed'}`);
+         try {
+            await this.executeTask(task, async (progress: number) => {
+               await options.updateProgress(progress);
+            });
+            Log.info(`[Queue] Completed task ${task.name || 'unnamed'}`);
+         } catch (err: any) {
+            Log.error(`[Queue] Failed task ${task.name || 'unnamed'}: ${err.message || err}`);
+            throw err;
+         }
+      });
+   }
 
    public async getTasks(): Promise<Task[]> {
-      const taskList = Array.from(this.tasks.values());
-      const tasksWithExistence = await Promise.all(taskList.map(async task => {
+      ensureBackend();
+      const adapter = Queue.getQueue<any>();
+      const tasks = await adapter.getTasks('ingestion');
+      return Promise.all(tasks.map(async (task: any) => {
          let hasTempFile = false;
          if (task.tempFilePath) {
             try {
@@ -133,57 +159,40 @@ class QueueManagerClass {
          }
          return { ...task, hasTempFile };
       }));
-      return tasksWithExistence.sort(
-         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-   }
-
-   public getTask(id: string): Task | undefined {
-      return this.tasks.get(id);
    }
 
    public async addTask(task: Omit<Task, 'id' | 'status' | 'progress' | 'createdAt'>): Promise<Task> {
-      const newTask: Task = {
+      ensureBackend();
+      const adapter = Queue.getQueue<any>();
+      
+      this.cleanupOldTempFiles().catch(() => {});
+
+      const messageId = await adapter.send(task, 'ingestion');
+      return {
          ...task,
-         id: crypto.randomUUID(),
+         id: messageId,
          status: 'pending',
          progress: 0,
          createdAt: new Date().toISOString()
-      };
-      this.tasks.set(newTask.id, newTask);
-      this.triggerProcessing();
-      return newTask;
+      } as Task;
    }
 
    public async retryTask(id: string): Promise<boolean> {
-      const task = this.tasks.get(id);
-      if (!task || task.status !== 'failed') return false;
-
-      if (task.tempFilePath) {
-         try {
-            await fs.access(task.tempFilePath);
-         } catch {
-            throw new Error("Le fichier temporaire d'origine a été supprimé ou est expiré. Veuillez réenregistrer.");
-         }
-      }
-
-      task.status = 'pending';
-      task.progress = 0;
-      delete task.error;
-      this.triggerProcessing();
-      return true;
+      ensureBackend();
+      const adapter = Queue.getQueue<any>();
+      return await adapter.retryTask(id);
    }
 
-   public deleteTask(id: string): boolean {
-      const task = this.tasks.get(id);
-      if (!task) return false;
-      if (task.status === 'processing') return false;
-
-      if (task.tempFilePath) {
+   public async deleteTask(id: string): Promise<boolean> {
+      ensureBackend();
+      const adapter = Queue.getQueue<any>();
+      
+      const tasks = await adapter.getTasks('ingestion');
+      const task = tasks.find(t => t.id === id);
+      if (task && task.tempFilePath) {
          fs.unlink(task.tempFilePath).catch(() => {});
       }
-      this.tasks.delete(id);
-      return true;
+      return await adapter.deleteTask(id);
    }
 
    private async cleanupOldTempFiles() {
@@ -207,54 +216,12 @@ class QueueManagerClass {
       }
    }
 
-   private triggerProcessing() {
-      if (this.isProcessing) return;
-      this.cleanupOldTempFiles(); // clean async
-      this.processNext();
-   }
-
-   private async processNext() {
-      const pendingTask = Array.from(this.tasks.values()).find(t => t.status === 'pending');
-      if (!pendingTask) {
-         this.isProcessing = false;
-         return;
-      }
-
-      this.isProcessing = true;
-      pendingTask.status = 'processing';
-      pendingTask.progress = 10;
-      pendingTask.startedAt = new Date().toISOString();
-      Log.info(`[Queue] Processing task ${pendingTask.id} (${pendingTask.name})`);
-
-      try {
-         await this.executeTask(pendingTask);
-         pendingTask.status = 'completed';
-         pendingTask.progress = 100;
-         Log.info(`[Queue] Completed task ${pendingTask.id}`);
-      } catch (err: any) {
-         pendingTask.status = 'failed';
-         pendingTask.error = err.message || 'Unknown error';
-         Log.error(`[Queue] Failed task ${pendingTask.id}: ${pendingTask.error}`, err);
-      } finally {
-         pendingTask.completedAt = new Date().toISOString();
-         if (pendingTask.status === 'completed' && pendingTask.tempFilePath) {
-            try {
-               await fs.unlink(pendingTask.tempFilePath);
-            } catch (e) {
-               // ignore
-            }
-         }
-         setTimeout(() => this.processNext(), 0);
-      }
-   }
-
-   private async executeTask(task: Task): Promise<void> {
-      initBackend();
+   private async executeTask(task: any, updateProgress: (progress: number) => Promise<void>): Promise<void> {
+      ensureBackend();
 
       const gitLocalPath = process.env.GIT_LOCAL_PATH || path.resolve(process.cwd(), '.second-brain-git');
       const documentStoragePath = process.env.DOCUMENT_STORAGE_PATH || path.resolve(process.cwd(), '.second-brain-docs');
 
-      // Resolve Location Context via Reverse Geocoding if coordinates are provided
       let locationContext = '';
       if (task.latitude !== undefined && task.longitude !== undefined) {
          try {
@@ -284,7 +251,7 @@ class QueueManagerClass {
       let isText = false;
       let buffer: Buffer | null = null;
 
-      task.progress = 20;
+      await updateProgress(20);
 
       const slugify = (text: string) => {
          return text
@@ -321,11 +288,10 @@ class QueueManagerClass {
             .replace(/\s+/g, ' ')
             .trim();
 
-         // Extract links for Level 1 crawling
          const level1Links = extractLinks(html, mainUrl);
          const processedUrls = new Set<string>([normalizeUrl(mainUrl)]);
          
-         task.progress = 25;
+         await updateProgress(25);
 
          const webAdapter = Ingestion.getAdapter('web');
          const parentResult = await webAdapter.process(rawText, {
@@ -337,7 +303,6 @@ class QueueManagerClass {
             ? task.category 
             : (parentResult.category || 'inbox');
 
-         // Limit category depth to at most 2 levels (parent/child)
          const catSegments = finalCategory.split('/').filter(Boolean);
          if (catSegments.length > 2) {
             finalCategory = catSegments.slice(0, 2).join('/');
@@ -347,7 +312,6 @@ class QueueManagerClass {
          const urlFileUid = crypto.randomUUID();
          const parentMdRef = `markdowns/${urlFileUid}-${parentSemanticId}.md`;
 
-         // Save initial parent document
          await docStorage.create(getDocFile(parentMdRef, 'text/markdown') as any, Readable.from([parentResult.markdown]));
          await gitAddIfRepo(path.join(documentStoragePath, parentMdRef));
 
@@ -367,15 +331,13 @@ class QueueManagerClass {
          await parentItem.save();
          await gitAddIfRepo(path.join(gitLocalPath, 'content', finalCategory, `${parentSemanticId}.md`));
 
-         // Begin crawling level 1 & 2 conditionally based on crawlDepth
          const children: Array<{ id: string; title: string; url: string; level: number }> = [];
          const crawlDepth = typeof task.crawlDepth === 'number' ? task.crawlDepth : 0;
          const level2Candidates: string[] = [];
 
          if (crawlDepth > 0) {
-            // Level 1: crawl up to 5 links from the main page
             const linksToCrawlLevel1 = level1Links.slice(0, 5);
-            task.progress = 30;
+            await updateProgress(30);
             let progressStep = 40 / (linksToCrawlLevel1.length || 1);
 
             for (const link1 of linksToCrawlLevel1) {
@@ -402,7 +364,6 @@ class QueueManagerClass {
                   const childFileUid = crypto.randomUUID();
                   const childMdRef = `markdowns/${childFileUid}-${childSemanticId}.md`;
 
-                  // Write sub-page markdown
                   await docStorage.create(getDocFile(childMdRef, 'text/markdown') as any, Readable.from([childResult.markdown]));
                   await gitAddIfRepo(path.join(documentStoragePath, childMdRef));
 
@@ -415,7 +376,7 @@ class QueueManagerClass {
                      category: childCategory,
                      tags: childResult.tags || [],
                      summary: childResult.summary,
-                     parent: parentSemanticId, // Link to parent
+                     parent: parentSemanticId,
                      originalFileUri: link1,
                      markdownFileUri: childMdRef,
                      body: childResult.markdown,
@@ -426,7 +387,6 @@ class QueueManagerClass {
 
                   children.push({ id: `${parentSemanticId}/${childSemanticId}`, title: childResult.title, url: link1, level: 1 });
 
-                  // Gather level 2 links from this page
                   const subLinks = extractLinks(childHtml, link1);
                   for (const l2 of subLinks) {
                      const normalizedL2 = normalizeUrl(l2);
@@ -438,14 +398,14 @@ class QueueManagerClass {
                   Log.warn(`[Queue] Failed to crawl Level 1 link ${link1}: ${err}`);
                }
 
-               task.progress = Math.min(70, task.progress + progressStep);
+               const currentProgress = Math.min(70, Math.floor(20 + progressStep));
+               await updateProgress(currentProgress);
             }
          }
 
          if (crawlDepth > 1) {
-            // Level 2: crawl up to 5 links from the Level 2 candidate pool
             const linksToCrawlLevel2 = level2Candidates.slice(0, 5);
-            task.progress = 70;
+            await updateProgress(70);
             let progressStep = 20 / (linksToCrawlLevel2.length || 1);
 
             for (const link2 of linksToCrawlLevel2) {
@@ -484,7 +444,7 @@ class QueueManagerClass {
                      category: childCategory,
                      tags: childResult.tags || [],
                      summary: childResult.summary,
-                     parent: parentSemanticId, // Link to parent
+                     parent: parentSemanticId,
                      originalFileUri: link2,
                      markdownFileUri: childMdRef,
                      body: childResult.markdown,
@@ -498,11 +458,11 @@ class QueueManagerClass {
                   Log.warn(`[Queue] Failed to crawl Level 2 link ${link2}: ${err}`);
                }
 
-               task.progress = Math.min(90, task.progress + progressStep);
+               const currentProgress = Math.min(90, Math.floor(70 + progressStep));
+               await updateProgress(currentProgress);
             }
          }
 
-         // Update parent document's markdown to add sub-documents list
          if (children.length > 0) {
             Log.info(`[Queue] Appending ${children.length} sub-document links to parent ${parentSemanticId}`);
             const childLinksSection = '\n\n## Documents enfants associés\n\n' + 
@@ -511,15 +471,12 @@ class QueueManagerClass {
                   .join('\n');
 
             const updatedBody = parentResult.markdown + childLinksSection;
-            
-            // Rewrite updated markdown file
             await docStorage.create(getDocFile(parentMdRef, 'text/markdown') as any, Readable.from([updatedBody]));
 
-            // Update parent record
             parentItem.set('body', updatedBody);
             await parentItem.save();
          }
-         task.progress = 100;
+         await updateProgress(100);
          return;
       }
 
@@ -531,7 +488,7 @@ class QueueManagerClass {
          isImage = task.type === 'image';
       }
 
-      task.progress = 40;
+      await updateProgress(40);
 
       let result;
 
@@ -559,7 +516,6 @@ class QueueManagerClass {
                model
             });
          } else {
-            // Either PDF or Text
             const isPdf = task.type === 'pdf' || (task.tempFilePath && task.tempFilePath.endsWith('.pdf'));
             if (isPdf && buffer) {
                result = await ocrAdapter.process(buffer, {
@@ -577,7 +533,7 @@ class QueueManagerClass {
          }
       }
 
-      task.progress = 70;
+      await updateProgress(70);
 
       const fileUid = crypto.randomUUID();
       const originalName = task.name.replace(/\.[^/.]+$/, '');
@@ -609,13 +565,11 @@ class QueueManagerClass {
          ? task.category 
          : (result.category || defaultCat);
 
-      // Limit category depth to at most 2 levels (parent/child)
       const catSegments = finalCategory.split('/').filter(Boolean);
       if (catSegments.length > 2) {
          finalCategory = catSegments.slice(0, 2).join('/');
       }
 
-      // Check if an item with the same originalFileUri or source URL already exists
       const query = ContentItem.query();
       const existingItemsResult = await ContentItem.repository().query(query);
       const existingItems = existingItemsResult.items || [];
@@ -639,7 +593,6 @@ class QueueManagerClass {
          try {
             const parsed = new Date(result.deductedDate);
             if (!isNaN(parsed.getTime())) {
-               // Shift date to the deducted day, keeping the current time portion
                const now = new Date();
                parsed.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
                itemCreatedAt = parsed.toISOString();
@@ -652,7 +605,7 @@ class QueueManagerClass {
          itemCreatedAt = existing.val('createdAt') || new Date().toISOString();
       }
 
-      task.progress = 85;
+      await updateProgress(85);
 
       const mergedTags = Array.from(new Set([
          ...(result.tags || []),
@@ -687,6 +640,7 @@ class QueueManagerClass {
       }
 
       await gitAddIfRepo(path.join(gitLocalPath, 'content', finalCategory, `${semanticId}.md`));
+      await updateProgress(100);
    }
 }
 
