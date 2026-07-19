@@ -300,38 +300,7 @@ export default function Dashboard({
    const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
    const activeAudioRef = useRef<HTMLAudioElement | null>(null);
 
-   useEffect(() => {
-      return () => {
-         window.speechSynthesis.cancel();
-         if (activeAudioRef.current) {
-            activeAudioRef.current.pause();
-         }
-         if (recognitionRef.current) {
-            recognitionRef.current.stop();
-         }
-         if (mediaRecorderChatRef.current && mediaRecorderChatRef.current.state !== 'inactive') {
-            mediaRecorderChatRef.current.stop();
-         }
-      };
-   }, []);
 
-   useEffect(() => {
-      (window as any).handleNativeMessage = (data: any) => {
-         if (data.type === 'RECORDING_STATE') {
-            setIsDictating(data.isRecording);
-         } else if (data.type === 'TRANSCRIPTION_RESULT') {
-            if (data.text) {
-               setInputMessage(prev => prev ? `${prev} ${data.text}` : data.text);
-            }
-         } else if (data.type === 'RECORDING_ERROR') {
-            alert(`Erreur d'enregistrement : ${data.error}`);
-            setIsDictating(false);
-         }
-      };
-      return () => {
-         delete (window as any).handleNativeMessage;
-      };
-   }, []);
 
    const handleToggleSpeech = async (text: string, index: number) => {
       const LANG_MAP: Record<string, string> = {
@@ -770,11 +739,11 @@ export default function Dashboard({
       }
    };
 
-   const handleSendMessage = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!inputMessage.trim() || sending) return;
+   const handleSendMessage = async (e?: React.FormEvent, overrideText?: string) => {
+      if (e) e.preventDefault();
+      const userText = (overrideText !== undefined ? overrideText : inputMessage).trim();
+      if (!userText || sending) return;
 
-      const userText = inputMessage;
       setInputMessage('');
       setMessages(prev => [...prev, { role: 'user', content: userText }]);
       setSending(true);
@@ -854,10 +823,43 @@ export default function Dashboard({
          }
       } catch (err) {
          setMessages(prev => [...prev, { role: 'assistant', content: 'Erreur de connexion. Impossible de contacter le serveur.' }]);
-      } finally {
+} finally {
          setSending(false);
       }
    };
+
+   useEffect(() => {
+      return () => {
+         window.speechSynthesis.cancel();
+         if (activeAudioRef.current) {
+            activeAudioRef.current.pause();
+         }
+         if (recognitionRef.current) {
+            recognitionRef.current.stop();
+         }
+         if (mediaRecorderChatRef.current && mediaRecorderChatRef.current.state !== 'inactive') {
+            mediaRecorderChatRef.current.stop();
+         }
+      };
+   }, []);
+
+   useEffect(() => {
+      (window as any).handleNativeMessage = (data: any) => {
+         if (data.type === 'RECORDING_STATE') {
+            setIsDictating(data.isRecording);
+         } else if (data.type === 'TRANSCRIPTION_RESULT') {
+            if (data.text) {
+               handleSendMessage(undefined, data.text);
+            }
+         } else if (data.type === 'RECORDING_ERROR') {
+            alert(`Erreur d'enregistrement : ${data.error}`);
+            setIsDictating(false);
+         }
+      };
+      return () => {
+         delete (window as any).handleNativeMessage;
+      };
+   }, [messages, sending, userProfile]);
 
     const handleDictation = () => {
        if ((window as any).ReactNativeWebView) {
@@ -896,7 +898,7 @@ export default function Dashboard({
              recognition.onresult = (event: any) => {
                 const transcript = event.results[0][0].transcript;
                 if (transcript) {
-                   setInputMessage(prev => prev ? `${prev} ${transcript}` : transcript);
+                   handleSendMessage(undefined, transcript);
                 }
              };
 
@@ -953,9 +955,9 @@ export default function Dashboard({
 
                 if (response.ok) {
                    const data = await response.json();
-                   if (data.text) {
-                      setInputMessage(prev => prev ? `${prev} ${data.text}` : data.text);
-                   }
+                    if (data.text) {
+                       handleSendMessage(undefined, data.text);
+                    }
                 } else {
                    console.error('Failed to transcribe audio via fallback');
                 }
