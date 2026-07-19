@@ -42,6 +42,16 @@ export const ContentItemProperties = [
       mandatory: false
    },
    {
+      name: 'fileHash',
+      type: StringProperty.TYPE,
+      mandatory: false
+   },
+   {
+      name: 'source',
+      type: StringProperty.TYPE,
+      mandatory: false
+   },
+   {
       name: 'markdownFileUri',
       type: StringProperty.TYPE,
       mandatory: false

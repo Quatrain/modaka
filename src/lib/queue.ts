@@ -40,6 +40,8 @@ export interface Task {
    hasTempFile?: boolean;
    latitude?: number;
    longitude?: number;
+   fileHash?: string;
+   source?: string;
 }
 
 
@@ -240,7 +242,8 @@ class QueueManagerClass {
             markdownFileUri: parentMdRef,
             contextNote: task.contextNote || '',
             body: parentResult.markdown,
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            source: mainUrl
          });
          await parentItem.save();
          await gitAddIfRepo(path.join(gitLocalPath, 'content', finalCategory, `${parentSemanticId}.md`));
@@ -294,7 +297,8 @@ class QueueManagerClass {
                      originalFileUri: link1,
                      markdownFileUri: childMdRef,
                      body: childResult.markdown,
-                     createdAt: new Date().toISOString()
+                     createdAt: new Date().toISOString(),
+                     source: link1
                   });
                   await childItem.save();
                   await gitAddIfRepo(path.join(gitLocalPath, 'content', childCategory, `${childSemanticId}.md`));
@@ -362,7 +366,8 @@ class QueueManagerClass {
                      originalFileUri: link2,
                      markdownFileUri: childMdRef,
                      body: childResult.markdown,
-                     createdAt: new Date().toISOString()
+                     createdAt: new Date().toISOString(),
+                     source: link2
                   });
                   await childItem.save();
                   await gitAddIfRepo(path.join(gitLocalPath, 'content', childCategory, `${childSemanticId}.md`));
@@ -490,6 +495,11 @@ class QueueManagerClass {
       
       const sourceUrl = task.url;
       const existing = existingItems.find(item => {
+         // Check by unique file hash first to detect duplicates
+         const itemHash = item.val('fileHash');
+         if (task.fileHash && itemHash && itemHash === task.fileHash) {
+            return true;
+         }
          const fileUri = item.val('originalFileUri');
          if (sourceUrl && fileUri === sourceUrl) {
             return true;
@@ -539,7 +549,9 @@ class QueueManagerClass {
          body: result.markdown,
          createdAt: itemCreatedAt,
          latitude: task.latitude !== undefined ? task.latitude.toString() : undefined,
-         longitude: task.longitude !== undefined ? task.longitude.toString() : undefined
+         longitude: task.longitude !== undefined ? task.longitude.toString() : undefined,
+         fileHash: task.fileHash,
+         source: task.source || (task.url ? task.url : undefined)
       });
 
       await contentItem.save();
