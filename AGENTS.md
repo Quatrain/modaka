@@ -2,7 +2,9 @@
 
 > **Audience**: AI Coding Agents & Human Pair Programming  
 > **Platform**: Astro 5 + React + Quatrain Core + Google Gemini AI + OKF v0.1  
-> **Repository**: `crapougnax/modaka` | **License**: AGPL-v3
+> **Upstream Canonical Repository (SOA)**: `https://github.com/Quatrain/modaka`  
+> **Personal Contributor Fork**: `https://github.com/crapougnax/modaka`  
+> **License**: AGPL-v3
 
 ---
 
