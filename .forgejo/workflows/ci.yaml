@@ -1,0 +1,37 @@
+name: Modaka Sovereign CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feat/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test & Build Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack & Verify Yarn
+        run: |
+          echo "Node.js version: $(node -v)"
+          corepack enable
+          yarn --version
+
+      - name: Resolve Workspace Dependencies
+        run: node ./bin/resolve-workspaces.cjs
+
+      - name: Install Dependencies
+        run: YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install
+
+      - name: Run Unit Tests
+        run: yarn test
