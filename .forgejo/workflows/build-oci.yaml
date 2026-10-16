@@ -1,0 +1,80 @@
+name: Build and Publish Sovereign OCI Image
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - 'feat/**'
+  workflow_dispatch:
+
+env:
+  REGISTRY: qtrn.io
+  IMAGE_NAME: modaka/client
+  DOCKER_HOST: tcp://127.0.0.1:2375
+
+jobs:
+  build-and-push:
+    name: Build & Push ARM64 OCI Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Docker CLI
+        run: |
+          echo "=== Step 1: Ensure Docker CLI is present ==="
+          if ! command -v docker > /dev/null 2>&1; then
+            apt-get update -qq && apt-get install -y -qq docker.io
+          fi
+          docker version
+          echo "Connecting to DinD daemon at ${DOCKER_HOST}..."
+          for i in $(seq 1 15); do
+            docker info > /dev/null 2>&1 && break
+            echo "Waiting for Docker daemon on ${DOCKER_HOST}... ($i/15)"
+            sleep 1
+          done
+          docker info | grep -E "Server Version|Architecture|OSType|Operating System"
+
+      - name: Log in to Sovereign Container Registry
+        run: |
+          echo "=== Step 2: Authenticating with ${REGISTRY} ==="
+          REG_USER="${{ secrets.REGISTRY_USER }}"
+          REG_PASS="${{ secrets.REGISTRY_TOKEN }}"
+          if [ -z "$REG_USER" ]; then
+            REG_USER="${{ github.actor }}"
+          fi
+          if [ -z "$REG_PASS" ]; then
+            REG_PASS="${{ secrets.GITHUB_TOKEN }}"
+          fi
+          echo "$REG_PASS" | docker login "${REGISTRY}" -u "$REG_USER" --password-stdin
+
+      - name: Build OCI Container Image
+        run: |
+          echo "=== Step 3: Building Container Image (${IMAGE_NAME}) ==="
+          SAFE_REF=$(echo "${{ github.ref_name }}" | tr '/' '-')
+          
+          docker build \
+            --file ./Containerfile \
+            --tag "${REGISTRY}/${IMAGE_NAME}:latest" \
+            --tag "${REGISTRY}/${IMAGE_NAME}:${{ github.sha }}" \
+            --tag "${REGISTRY}/${IMAGE_NAME}:${SAFE_REF}" \
+            --tag "${REGISTRY}/modaka/app:latest" \
+            .
+
+      - name: Publish Image to Forgejo OCI Registry
+        run: |
+          echo "=== Step 4: Publishing Image to ${REGISTRY} ==="
+          SAFE_REF=$(echo "${{ github.ref_name }}" | tr '/' '-')
+
+          docker push "${REGISTRY}/${IMAGE_NAME}:latest"
+          docker push "${REGISTRY}/${IMAGE_NAME}:${{ github.sha }}"
+          docker push "${REGISTRY}/${IMAGE_NAME}:${SAFE_REF}"
+          docker push "${REGISTRY}/modaka/app:latest"
+
+          echo "=== Verification: OCI Image Successfully Published ==="
+          docker images "${REGISTRY}/${IMAGE_NAME}"
