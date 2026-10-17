@@ -10,7 +10,7 @@ on:
 
 env:
   REGISTRY: qtrn.io
-  IMAGE_NAME: modaka/client
+  IMAGE_NAME: quatrain/modaka
   DOCKER_HOST: tcp://127.0.0.1:2375
 
 jobs:
@@ -63,7 +63,6 @@ jobs:
             --tag "${REGISTRY}/${IMAGE_NAME}:latest" \
             --tag "${REGISTRY}/${IMAGE_NAME}:${{ github.sha }}" \
             --tag "${REGISTRY}/${IMAGE_NAME}:${SAFE_REF}" \
-            --tag "${REGISTRY}/modaka/app:latest" \
             .
 
       - name: Publish Image to Forgejo OCI Registry
@@ -74,7 +73,6 @@ jobs:
           docker push "${REGISTRY}/${IMAGE_NAME}:latest"
           docker push "${REGISTRY}/${IMAGE_NAME}:${{ github.sha }}"
           docker push "${REGISTRY}/${IMAGE_NAME}:${SAFE_REF}"
-          docker push "${REGISTRY}/modaka/app:latest"
 
           echo "=== Verification: OCI Image Successfully Published ==="
           docker images "${REGISTRY}/${IMAGE_NAME}"
