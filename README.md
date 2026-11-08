@@ -1,13 +1,13 @@
-# Modaka — Digital Knowledge Copilot & Sovereign Edge Brain
+# Modaka — Local-First Second Brain, Knowledge Hub & OKF Engine
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Astro](https://img.shields.io/badge/Astro-5.0-BC52EE.svg?logo=astro&logoColor=white)](https://astro.build/)
 [![OKF v0.1](https://img.shields.io/badge/Format-OKF_v0.1-orange.svg)](#)
 [![Local-First](https://img.shields.io/badge/Architecture-Local--First_0ms-success.svg)](#)
-[![Tests: 41 Passed](https://img.shields.io/badge/Tests-41_Passed-brightgreen.svg)](#)
+[![CI](https://git.qtrn.io/modaka/app/actions/workflows/ci.yaml/badge.svg?branch=develop)](https://git.qtrn.io/modaka/app/actions?workflow=ci.yaml)
 
-**Modaka** is a decentralized, local-first, touch-optimized digital knowledge base and personal AI copilot built on **Astro 5**, **React**, **Quatrain Core**, and **Google Gemini AI**. It organizes your notes, audio transcripts, PDFs, images, and web research using the standardized **OKF (Open Knowledge Format v0.1)** structure backed by local Git storage.
+**Modaka** is a decentralized, local-first, touch-optimized digital knowledge base and personal AI copilot built on **Astro 5**, **React** and **Quatrain Core**. The language model behind it is chosen by configuration (see [Model Providers](#model-providers)). It organizes your notes, audio transcripts, PDFs, images, and web research using the standardized **OKF (Open Knowledge Format v0.1)** structure backed by local Git storage.
 
 ---
 
@@ -47,7 +47,7 @@ graph TD
     
     UploadAPI -->|Enqueue Task| Queue["SQLite Queue Manager"]
     Queue -->|Background Worker| Ingestion["Quatrain Ingestion Adapters"]
-    Ingestion -->|OCR / Audio / Web| GEMINI["Gemini Flash 2.5"]
+    Ingestion -->|OCR / Audio / Web| LLM["AI port (@quatrain/ai)"]
     
     SearchAPI -->|Search Query| QMD["@quatrain/searchengine-qmd Adapter"]
     QMD -->|Hybrid Rank| Disk[("Local OKF Filesystem")]
@@ -76,7 +76,7 @@ GET /api/search?q=ISO+27001&category=certification&mode=hybrid&limit=10
 
 ### 🎙️ Multi-Format Ingestion Pipelines
 - **Audio Notes**: Transcribes live or uploaded audio recordings (`.wav`, `.m4a`, `.mp3`) and derives structured summaries.
-- **Multimodal OCR**: Extracts text from scanned PDFs and images with complete layout fidelity using Gemini Vision.
+- **Multimodal OCR**: Extracts text from scanned PDFs and images with a multimodal model (Gemini today, see [Roadmap](#roadmap)).
 - **Web Crawling**: Scrapes web pages, strips boilerplate navigation, extracts Markdown body text, and recursively processes sub-links.
 - **Wikipedia Concept Auto-Linking**: Identifies proper nouns in documents and automatically pulls Wikipedia summaries to build concept pages under `content/concepts/`.
 
@@ -84,7 +84,7 @@ GET /api/search?q=ISO+27001&category=certification&mode=hybrid&limit=10
 
 ## 🛠️ Monorepo & Core Package Dependencies
 
-Modaka relies directly on the **Quatrain Core** modular ecosystem (`/Users/crapougnax/CODE/QUATRAIN/Core`):
+Modaka relies directly on the **[Quatrain Core](https://git.qtrn.io/quatrain/core)** modular ecosystem, published as `@quatrain/*` npm packages. To work against a local Core checkout, set `CORE_DIR` to its `packages/` directory.
 
 | Package | Role & Responsibility |
 |---------|------------------------|
@@ -93,7 +93,9 @@ Modaka relies directly on the **Quatrain Core** modular ecosystem (`/Users/crapo
 | `@quatrain/okf` | Open Knowledge Format adapter and recursive `index.md` generator. |
 | `@quatrain/searchengine` | Abstract search engine contract and registry manager. |
 | `@quatrain/searchengine-qmd` | QMD (Query Markup Documents) hybrid BM25/Vector search adapter. |
-| `@quatrain/ai-gemini` | Gemini Pro and Flash LLM integration provider. |
+| `@quatrain/ai` | Provider-agnostic AI port. |
+| `@quatrain/ai-gemini` | Gemini adapter for the AI port. |
+| `@quatrain/ai-openai` | OpenAI-compatible adapter (OpenAI, Mistral, Groq, OpenRouter, Ollama, any compatible endpoint). |
 | `@quatrain/ingestion-ocr` | Multimodal document OCR processing pipeline. |
 | `@quatrain/ingestion-audio` | Audio transcription and metadata extraction. |
 | `@quatrain/queue-sqlite` | SQLite-backed background task queue. |
@@ -106,12 +108,16 @@ Modaka relies directly on the **Quatrain Core** modular ecosystem (`/Users/crapo
 ### Prerequisites
 - **Node.js**: `>= 22.0.0`
 - **Package Manager**: [Yarn Berry](https://yarnpkg.com) or [Bun](https://bun.sh)
-- **API Key**: [Google AI Studio](https://aistudio.google.com/) Gemini API Key
+- **A language model**: an API key for a hosted provider, or a local OpenAI-compatible server (see [Model Providers](#model-providers))
 
 ### Environment Configuration (`.env`)
 Create a `.env` file in the root directory:
 
 ```env
+# User configuration file written by the settings screen (model provider, see below)
+MODAKA_CONFIG_PATH=/absolute/path/to/user_config.json
+
+# Only for the gemini provider
 GEMINI_API_KEY=your_google_gemini_api_key_here
 GEMINI_MODEL=gemini-2.5-flash
 
@@ -136,13 +142,56 @@ yarn dev
 The application will be accessible at `http://localhost:4321`.
 
 ### Running Tests
-Execute the Vitest suite (35+ unit tests):
+Execute the Vitest suite:
 ```bash
 yarn test
 ```
 
 ---
 
+## Model Providers
+
+Chat and the structuring of ingested content go through the `@quatrain/ai` port. The provider is chosen in the settings screen, which writes the user configuration file (`MODAKA_CONFIG_PATH`), or directly in that file:
+
+```json
+{
+  "llm": {
+    "active": "ollama",
+    "providers": {
+      "ollama": { "model": "llama3.1", "endpoint": "http://localhost:11434/v1" }
+    }
+  }
+}
+```
+
+| `active` | Adapter | Default endpoint | API key |
+|---|---|---|---|
+| `gemini` | `@quatrain/ai-gemini` | Google | required (`GEMINI_API_KEY` or `apiKey`) |
+| `openai` | `@quatrain/ai-openai` | `https://api.openai.com/v1` | required |
+| `mistral` | `@quatrain/ai-openai` | `https://api.mistral.ai/v1` | required |
+| `groq` | `@quatrain/ai-openai` | `https://api.groq.com/openai/v1` | required |
+| `openrouter` | `@quatrain/ai-openai` | `https://openrouter.ai/api/v1` | required |
+| `ollama` / `llama` | `@quatrain/ai-openai` | `http://localhost:11434/v1` | none |
+
+Any other OpenAI-compatible server (llama.cpp, vLLM, LM Studio) works with `endpoint` set to its `/v1` URL.
+
+Current limits, tracked in the [Roadmap](#roadmap): OCR and audio transcription still require a Gemini model, and text-to-speech uses ElevenLabs, OpenAI or the browser's speech synthesis.
+
+---
+
+## Roadmap
+
+In progress or planned; not available yet:
+
+- **Local models for every capability**: OCR, transcription and text-to-speech through the AI port, so that a fully local setup needs no hosted provider; local embeddings.
+- **Traceability**: event log of LLM-judge verdicts, of the sources consulted for each answer, of human confirmations (reviewer, date), and of provenance events at ingestion (creation, update, validation, summary, transcription, transfer to a downstream instance). Today the history of a document is its Git history.
+- **Governed sharing**: filtered subsets delivered to downstream instances as Git forks, with feedback flowing back upstream.
+- **Q/A regression tests** replayed on every ingestion.
+
+---
+
 ## 📄 License
 
-This project is licensed under the **AGPL-3.0-only** license. See the [LICENSE](file:///Users/crapougnax/CODE/CRAPOUGNAX/modaka/package.json#L7) file for details.
+Copyright © 2026 Quatrain Technologies SAS.
+
+This project is licensed under the **AGPL-3.0-only** license. See the [LICENSE](./LICENSE) file for details.
