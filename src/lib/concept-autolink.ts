@@ -31,7 +31,7 @@ export async function searchAndCreateConcept(properNoun: string): Promise<void> 
    Log.info(`[Concept Auto-Link] Searching Wikipedia for "${properNoun}"...`);
    try {
       const pageSlug = encodeURIComponent(properNoun.replace(/ /g, '_'));
-      const headers = { 'User-Agent': 'SecondBrainAgent/1.0 (contact: olivier@lepine.fr)' };
+      const headers = { 'User-Agent': 'Modaka/0.1 (+https://git.qtrn.io/modaka/app)' };
 
       let data: any = null;
       try {

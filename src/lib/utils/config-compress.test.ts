@@ -15,8 +15,8 @@ describe('config-compress', () => {
   it('should perform round-trip compression and decompression for full config', () => {
     const fullConfig: UserConfigSpec = {
       lang: 'fr_FR',
-      name: 'Brad',
-      email: 'brad@example.com',
+      name: 'Alice',
+      email: 'alice@example.com',
       llm: {
         provider: 'llama',
         model: 'gemma-4',
@@ -42,14 +42,14 @@ describe('config-compress', () => {
     const compressed = compressConfig(fullConfig);
     expect(compressed).toBeDefined();
     expect(compressed?.lg).toBe('fr_FR');
-    expect(compressed?.nm).toBe('Brad');
+    expect(compressed?.nm).toBe('Alice');
     expect(compressed?.ai?.pr).toBe('llama');
     expect(compressed?.ok?.ur).toBe('owner/repo');
 
     const decompressed = decompressConfig(compressed);
     expect(decompressed).toBeDefined();
     expect(decompressed?.lang).toBe('fr_FR');
-    expect(decompressed?.name).toBe('Brad');
+    expect(decompressed?.name).toBe('Alice');
     expect(decompressed?.llm?.provider).toBe('llama');
     expect(decompressed?.okfStorage?.gitUrl).toBe('https://github.com/owner/repo');
     expect(decompressed?.blobStorage?.bucket).toBe('my-bucket');

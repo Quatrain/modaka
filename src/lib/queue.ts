@@ -220,7 +220,7 @@ class QueueManagerClass {
             Queue.info(`[Queue Geocoding] Fetching location for coords: ${task.latitude}, ${task.longitude}`);
             const res = await nominatimClient.get('/reverse', {
                headers: {
-                  'User-Agent': 'SecondBrainNoteTaker/1.0 (contact: brad@quatrain.com)'
+                  'User-Agent': 'Modaka/0.1 (+https://git.qtrn.io/modaka/app)'
                },
                format: 'json',
                lat: task.latitude,

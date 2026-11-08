@@ -4,8 +4,8 @@ import node from '@astrojs/node';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 
-const coreDir = process.env.CORE_DIR || '/Users/crapougnax/CODE/QUATRAIN/Core/packages';
-const hasLocalPortal = fs.existsSync(coreDir);
+const coreDir = process.env.CORE_DIR || '';
+const hasLocalPortal = coreDir !== '' && fs.existsSync(coreDir);
 
 const localAliases = hasLocalPortal ? {
   '@quatrain/core': path.join(coreDir, 'core/src/index.ts'),
