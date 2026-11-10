@@ -8,7 +8,7 @@ Ce document regroupe les procédures courantes, exemples d'utilisation et détai
 
 ### 1. Configurer vos Passions et Intérêts (Catégories)
 Les thèmes proposés lors du premier démarrage (onboarding) sont définis de manière statique.
-* **Fichier source :** [onboarding.yaml](file:///Users/crapougnax/CODE/CRAPOUGNAX/second-brain/src/config/onboarding.yaml)
+* **Fichier source :** [onboarding.yaml](./src/config/onboarding.yaml)
 * **Format d'édition :**
   ```yaml
   themes:
@@ -56,7 +56,7 @@ console.log("Indexation terminée !");
 Lorsque vous parlez au Copilote, celui-ci tente de deviner quels documents vous mentionnez dans votre question afin de charger leur texte complet dans son contexte.
 
 ### Algorithme de détection
-Le fichier [chat.ts](file:///Users/crapougnax/CODE/CRAPOUGNAX/second-brain/src/pages/api/chat.ts) procède comme suit :
+Le fichier [chat.ts](./src/pages/api/chat.ts) procède comme suit :
 1. Il nettoie la question en minuscules.
 2. Pour chaque document de la base, il extrait les mots de son titre de plus de 2 lettres.
 3. Il exclut les mots de liaison courants (stop words) en français et en anglais :
@@ -68,6 +68,6 @@ Le fichier [chat.ts](file:///Users/crapougnax/CODE/CRAPOUGNAX/second-brain/src/p
 ---
 
 ## 📱 Adaptation Écran (Tactile)
-Le CSS de l'application ([global.css](file:///Users/crapougnax/CODE/CRAPOUGNAX/second-brain/src/styles/global.css)) a été optimisé pour une expérience applicative mobile :
+Le CSS de l'application ([global.css](./src/styles/global.css)) a été optimisé pour une expérience applicative mobile :
 * `.app-container` : Limité à un `max-width: 1200px` centré pour le confort visuel sur grand écran, mais entièrement fluide sur mobile et tablette.
 * `.bottom-nav` : Menu d'onglets fixé en bas de l'écran, centré et aligné sur les dimensions du viewport mobile pour une manipulation facile au pouce.

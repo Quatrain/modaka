@@ -4,6 +4,7 @@ import { ContentItem } from '../../lib/models/ContentItem';
 import { Storage } from '@quatrain/storage';
 import { Backend } from '@quatrain/backend';
 import { Core } from '@quatrain/core';
+import { Config } from '@quatrain/config';
 import { ChatController } from '@quatrain/chat';
 import type { ChatDocument } from '@quatrain/chat';
 import { Readable } from 'node:stream';
@@ -34,11 +35,13 @@ export const POST: APIRoute = async ({ request }) => {
       }
 
       // Fetch all metadata documents to construct high-level context
+      const ioStartTime = Date.now();
       const query = ContentItem.query();
       query.setLimits({ offset: 0, batch: 1000 });
       const itemsResult = await ContentItem.repository().query(query);
       const items = itemsResult.items || [];
-      Backend.info(`Queried metadata documents from database: found ${items.length} items`);
+      const ioTimeMs = Date.now() - ioStartTime;
+      Backend.info(`Queried metadata documents from database: found ${items.length} items in ${ioTimeMs}ms`);
 
       // Convert ContentItem to ChatDocument (decoupling data query from prompt builder)
       const chatDocuments: ChatDocument[] = items.map((item) => {
@@ -51,8 +54,9 @@ export const POST: APIRoute = async ({ request }) => {
             summary: item.val('summary') || '',
             contentLoader: markdownRef ? async () => {
                const docStorage = Storage.getStorage('document-storage');
+               const bucket = (docStorage as any)?._params?.config?.bucket;
                const getDocFile = (ref: string) => ({
-                  bucket: process.env.S3_BUCKET || 'documents',
+                  bucket,
                   ref,
                   name: path.basename(ref)
                });
@@ -107,9 +111,14 @@ export const POST: APIRoute = async ({ request }) => {
       }
 
       // Instantiate core ChatController
+      const chatProvider = Config.get<string>('llm.provider') || Config.get<string>('llm.active') || 'gemini';
+      const chatModel = Config.get<string>('llm.model') || Config.get<string>('gemini.model');
+      if (!chatModel) {
+         throw new Error('Aucun modèle LLM configuré. Veuillez définir un modèle dans les paramètres.');
+      }
       const controller = new ChatController({
-         provider: 'gemini',
-         model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+         provider: chatProvider,
+         model: chatModel,
          userProfile: {
             name: userProfile?.name,
             email: userProfile?.email,
@@ -118,6 +127,7 @@ export const POST: APIRoute = async ({ request }) => {
       });
 
       // Delegate prompt construction, token search (RAG) and LLM streaming to @quatrain/chat
+      const aiStartTime = Date.now();
       const {
          stream,
          matchedDocsCount,
@@ -125,10 +135,7 @@ export const POST: APIRoute = async ({ request }) => {
          model
       } = await controller.sendMessageStream(messages, chatDocuments);
 
-      const ioTimeMs = Date.now() - startTime;
-      const aiStartTime = Date.now();
-
-      Core.info(`[Gemini] Initiated text streaming successfully via @quatrain/chat`);
+      Core.info(`[${chatProvider}] Initiated text streaming (${chatModel}) via @quatrain/chat`);
 
       const encoder = new TextEncoder();
       const readable = new ReadableStream({

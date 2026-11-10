@@ -24,7 +24,7 @@ Bridge personal sovereign edge nodes (`modaka`) with centralized institutional a
   ```json
   [
     {
-      "hubUrl": "https://hub.hey.brad.ag",
+      "hubUrl": "https://hub.example.org",
       "channel": "itineraries/viticulture",
       "autoPull": true
     }

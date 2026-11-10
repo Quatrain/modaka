@@ -1,0 +1,91 @@
+name: Build and Publish OCI Image
+
+# Image tags (registry qtrn.io, image modaka/app):
+#   pull request         -> build only, nothing pushed
+#   push to develop      -> :develop and :sha-<short sha>   (staging)
+#   tag vX.Y.Z (on main) -> :X.Y.Z, :X.Y and :latest        (production)
+# Branches never publish :latest: production deployments pin :X.Y.Z.
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+env:
+  REGISTRY: qtrn.io
+  IMAGE_NAME: modaka/app
+  DOCKER_HOST: tcp://127.0.0.1:2375
+
+jobs:
+  build:
+    name: Build & Push ARM64 OCI Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Docker CLI
+        run: |
+          if ! command -v docker > /dev/null 2>&1; then
+            apt-get update -qq && apt-get install -y -qq docker.io
+          fi
+          for i in $(seq 1 15); do
+            docker info > /dev/null 2>&1 && break
+            echo "waiting for the Docker daemon ($i/15)"
+            sleep 1
+          done
+          docker info | grep -E "Server Version|Architecture"
+
+      - name: Compute tags
+        id: tags
+        run: |
+          image="$REGISTRY/$IMAGE_NAME"
+          short=$(echo "$GITHUB_SHA" | cut -c1-7)
+          tags="$image:sha-$short"
+          push=false
+          case "$GITHUB_REF" in
+            refs/tags/v*)
+              version="${GITHUB_REF#refs/tags/v}"
+              tags="$tags $image:$version $image:${version%.*} $image:latest"
+              push=true
+              ;;
+            refs/heads/develop)
+              tags="$tags $image:develop"
+              push=true
+              ;;
+          esac
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+          echo "push=$push" >> "$GITHUB_OUTPUT"
+          echo "tags: $tags (push: $push)"
+
+      - name: Build
+        run: |
+          args=""
+          for tag in ${{ steps.tags.outputs.tags }}; do
+            args="$args --tag $tag"
+          done
+          docker build --file ./Containerfile \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            $args .
+
+      - name: Log in to the registry
+        if: steps.tags.outputs.push == 'true'
+        env:
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+        run: |
+          if [ -z "$REGISTRY_USER" ] || [ -z "$REGISTRY_TOKEN" ]; then
+            echo "REGISTRY_USER / REGISTRY_TOKEN organisation secrets are missing" >&2
+            exit 1
+          fi
+          echo "$REGISTRY_TOKEN" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
+
+      - name: Push
+        if: steps.tags.outputs.push == 'true'
+        run: |
+          for tag in ${{ steps.tags.outputs.tags }}; do
+            docker push "$tag"
+          done

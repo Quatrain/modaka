@@ -1,8 +1,8 @@
 # LLM Agent Instructions & Guidelines — Modaka
 
 > **Audience**: AI Coding Agents & Human Pair Programming  
-> **Platform**: Astro 5 + React + Quatrain Core + Google Gemini AI + OKF v0.1  
-> **Upstream Canonical Repository (SOA)**: `https://github.com/Quatrain/modaka`  
+> **Platform**: Astro 5 + React + Quatrain Core + provider-agnostic AI port (@quatrain/ai) + OKF v0.1  
+> **Upstream Canonical Repository (SOA)**: `https://git.qtrn.io/modaka/app` (GitHub `Quatrain/modaka` is a read-only mirror)  
 > **Personal Contributor Fork**: `https://github.com/crapougnax/modaka`  
 > **License**: AGPL-v3
 
