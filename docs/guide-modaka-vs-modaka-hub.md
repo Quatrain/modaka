@@ -58,7 +58,7 @@ Utilisez **Modaka-Hub** lorsque vous êtes dans une posture de **curation scient
 5. **Gouvernance & Sécurité (RBAC)** : Gérer les droits éditoriaux (`admin` vs `curator`) et verrouiller les champs critiques de traçabilité (`soa`, `revision`).
 
 ### 💻 Comment l'utiliser :
-1. Connectez-vous sur l'instance web partagée (ex: `https://hub.brad.team/`).
+1. Connectez-vous sur l'instance web partagée (ex: `https://hub.example.org/`).
 2. Déposez vos documents bruts dans le sas d'ingestion.
 3. Utilisez le **Curation Workbench** pour qualifier les taxonomies, corriger les résumés générés par l'IA et valider le commit Git dans la branche d'autorité.
 4. Lancez une extraction ciblée via le menu *Extraction Contextuelle* pour exporter un sous-arbre prêt à l'emploi.

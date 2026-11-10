@@ -10,7 +10,7 @@ on:
 
 env:
   REGISTRY: qtrn.io
-  IMAGE_NAME: quatrain/modaka
+  IMAGE_NAME: modaka/app
   DOCKER_HOST: tcp://127.0.0.1:2375
 
 jobs:

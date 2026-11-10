@@ -48,9 +48,9 @@ WORKDIR /app
 # OCI standard metadata labels
 LABEL org.opencontainers.image.title="Modaka"
 LABEL org.opencontainers.image.description="Agnostic, touch-first sovereign OKF knowledge engine"
-LABEL org.opencontainers.image.source="https://github.com/Quatrain/modaka"
-LABEL org.opencontainers.image.licenses="AGPL-3.0"
-LABEL org.opencontainers.image.vendor="Quatrain Technologies"
+LABEL org.opencontainers.image.source="https://git.qtrn.io/modaka/app"
+LABEL org.opencontainers.image.licenses="AGPL-3.0-only"
+LABEL org.opencontainers.image.vendor="Quatrain Technologies SAS"
 LABEL org.opencontainers.image.authors="Quatrain Developers <developers@quatrain.com>"
 
 # Lean runtime system dependencies:
